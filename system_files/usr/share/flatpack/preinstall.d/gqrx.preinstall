@@ -1,0 +1,3 @@
+[Flatpak Preinstall dk.gqrx.gqrx]
+Branch=stable
+IsRuntime=false

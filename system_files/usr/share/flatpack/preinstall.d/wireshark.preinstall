@@ -1,0 +1,3 @@
+[Flatpak Preinstall org.wireshark.Wireshark]
+Branch=stable
+IsRuntime=false
