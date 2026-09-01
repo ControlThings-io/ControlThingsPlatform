@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Aquila Aurea Machina
+Comment=ControlThings Platform wallpaper
+Type=Service
+Icon=preferences-desktop-wallpaper
+X-KDE-ServiceTypes=Plasma/Wallpaper
+X-KDE-PluginInfo-Name=controlthings-aquila-aurea-machina
+X-KDE-PluginInfo-Author=ControlThings Platform
+X-KDE-PluginInfo-License=Proprietary
+X-KDE-PluginInfo-Version=1.0
