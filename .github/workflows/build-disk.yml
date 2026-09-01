@@ -15,6 +15,11 @@ on:
         options:
           - amd64
           - arm64
+      image_tag:
+        description: "Image tag to install"
+        required: true
+        default: latest
+        type: string
   pull_request:
     branches:
       - main
@@ -26,7 +31,6 @@ on:
 env:
   IMAGE_NAME: ${{ github.event.repository.name }} # output of build.yml, keep in sync
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"  # do not edit
-  DEFAULT_TAG: "latest"
   BIB_IMAGE: "quay.io/centos-bootc/bootc-image-builder:latest"
 
 concurrency:
@@ -77,13 +81,38 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      - name: Validate image tag
+        id: select-image
+        shell: bash
+        env:
+          INPUT_IMAGE_TAG: ${{ inputs.image_tag || 'latest' }}
+        run: |
+          set -euo pipefail
+          image_tag="${INPUT_IMAGE_TAG,,}"
+          if [[ "$image_tag" != "latest" && ! "$image_tag" =~ ^ics410_[a-z0-9]+$ ]]; then
+            echo "Unsupported image tag: $INPUT_IMAGE_TAG"
+            echo "Use 'latest' or an ics410_* tag, such as 'ics410_l01'."
+            exit 1
+          fi
+          echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Select image tag
+        shell: bash
+        if: matrix.disk-type == 'anaconda-iso'
+        env:
+          SELECTED_TAG: ${{ steps.select-image.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+          sed "s|__IMAGE_REF__|${IMAGE_REGISTRY}/${IMAGE_NAME}:${SELECTED_TAG}|g" \
+            disk_config/iso.toml > disk_config/iso-selected.toml
+
       - name: Build disk images
         id: build
         uses: osbuild/bootc-image-builder-action@8661cd3832544ad68c12dcde8681b13ab0f56a8d # main
         with:
           builder-image: ${{ env.BIB_IMAGE }}
-          config-file: ${{ matrix.disk-type == 'anaconda-iso' && './disk_config/iso.toml' || './disk_config/disk.toml' }}
-          image: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}
+          config-file: ${{ matrix.disk-type == 'anaconda-iso' && './disk_config/iso-selected.toml' || './disk_config/disk.toml' }}
+          image: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.select-image.outputs.image_tag }}
           chown: ${{ env.USER_UID }}:${{ env.USER_GID }}
           types: ${{ matrix.disk-type }}
           additional-args: --use-librepo=True
