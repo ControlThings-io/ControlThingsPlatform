@@ -41,6 +41,8 @@ done
 #### Example for enabling a System Unit File
 
 systemctl enable podman.socket
+chmod 0755 /usr/libexec/controlthings-groups
+systemctl enable controlthings-groups.service
 
 # Remove inherited counting cookies after package operations, before rechunking.
 # Tiny changes here otherwise invalidate the large unpackaged-content layer.

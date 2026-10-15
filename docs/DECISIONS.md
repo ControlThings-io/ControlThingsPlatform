@@ -1,5 +1,34 @@
 # Decisions
 
+## ControlThings capture groups — 2026-10-15
+
+Accepted user choice: mimic Aurora's group setup, using `controlthings-groups`
+for both the shared script and the ujust recipe. Manage only `wireshark` and
+`usbmon`; leave `dialout` to Aurora's existing `ujust dx-group` tooling. This
+supersedes the discarded proposal to enforce defaults through useradd hooks.
+
+Use an enabled systemd oneshot service and a version marker, following
+[Aurora's script](https://github.com/get-aurora-dev/common/blob/f813004dd14804a674ea22f45dd538f0d4b56f08/system_files/shared/usr/libexec/aurora-groups.sh).
+Automatic setup adds all current wheel members once per setup version, including
+existing administrators. Iterate the full array, correcting Aurora's first-entry
+expansion. Leave setup pending if no wheel users exist yet, and write the marker
+only after every membership change succeeds. Failed setup may leave earlier
+successful additions in place; retrying is safe.
+
+The `ujust controlthings-groups` recipe authorizes the same root script with
+`--user` for the invoking local account. This explicit path bypasses the marker
+and does not update it. New accounts after automatic setup require the command;
+this is no longer a creation-time guarantee for all regular users. Preserve
+other group memberships with `usermod --append`. Like Aurora, copy vendor-only
+group entries into `/etc/group` before changing memberships; preserve their
+GIDs, and create missing groups with groupadd. Keep one membership implementation
+shared by the boot service and interactive command. No new useradd hook, kernel
+module loading, or device-permission policy is included.
+
+Usage is in [README.md](../README.md#controlthings-capture-groups); validation and
+remaining integration checks are in
+[STATUS.md](STATUS.md#controlthings-capture-groups--2026-10-15).
+
 ## Disk workflow and update channels — 2026-10-15
 
 Accepted user choices: disk generation remains manual, offers AMD64 (default)

@@ -1,5 +1,35 @@
 # Current status
 
+## ControlThings capture groups — 2026-10-15
+
+- Added `/usr/libexec/controlthings-groups`, an Aurora-style root setup script
+  for `wireshark` and `usbmon`. Automatic setup appends both groups to all current
+  wheel members once per version, preserving other memberships and vendor GIDs.
+  It records success in `/etc/ublue/controlthings-groups`; no wheel members leaves
+  setup pending. `--user USER` handles explicit later additions without changing
+  the automatic marker. Existing administrators are included on first setup.
+- Added/enabled `controlthings-groups.service` after sysusers and Aurora group setup, with retry
+  on failure, and `ujust controlthings-groups` in Aurora's imported `60-custom.just`.
+  The recipe uses pkexec to call the shared script for the invoking user and
+  instructs logout/login. `build_files/build.sh` ensures executable script mode.
+  Dialout remains outside this feature. No discarded useradd-hook files remain.
+- Validation passed: `python3 tests/check_controlthings_groups.py`, using real
+  groupadd/usermod in Bubblewrap namespaces with temporary account files and a
+  deterministic vendor-group fixture. Covers multiple wheel accounts, manual
+  user setup, primary/other membership preservation, vendor GID preservation,
+  marker skip/version upgrade, empty-wheel retry, failed setup without marker,
+  and mocked pkexec delegation by the real ujust recipe. Bash syntax, custom Just
+  formatting, `XDG_RUNTIME_DIR=/tmp just check`, systemd enablement in a temporary
+  root, and whitespace review passed. The account test ran outside the session
+  sandbox to permit shadow-utils audit sockets; host accounts stayed untouched.
+- Remaining: build/deploy the image; check the actual boot service and marker,
+  `ujust controlthings-groups` authorization through KDE, and effective memberships
+  after logout/login. Verify a newly added account using the manual command and
+  packet/USB capture with the intended hardware. No container build, VM boot,
+  desktop authorization, hardware capture, or remote CI performed for this change.
+- [README.md](../README.md#controlthings-capture-groups) covers usage;
+  [DECISIONS.md](DECISIONS.md#controlthings-capture-groups--2026-10-15) records scope.
+
 ## Disk workflow migration — 2026-10-15
 
 - Updated `.github/workflows/build-disk.yml` to manual builds with an AMD64/ARM64
