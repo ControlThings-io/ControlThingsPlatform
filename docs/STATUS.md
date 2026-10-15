@@ -1,5 +1,39 @@
 # Current status
 
+## CyberChef offline build — 2026-10-15
+
+- Added `build_files/install-cyberchef.py` to resolve the latest stable official
+  release, require/verify its ZIP SHA-256, reject unsafe archive paths/symlinks,
+  and install all offline files to `/usr/share/cyberchef/`. Includes a stable
+  `index.html` symlink, matching release LICENSE, and `release.json` identity.
+- Added `cyberchef.desktop` under the system overlay, launching the local HTML
+  through xdg-open, and installation of the bundled 128x128 hicolor icon. Python
+  and xdg-utils are explicit package dependencies. A separate Containerfile step
+  refreshes CyberChef using a per-invocation Justfile cache argument, preserving
+  cache independence for package installation. File timestamps are normalized
+  to release publication time to avoid timestamp-only CyberChef payload churn.
+- Checks passed: `python3 tests/check_cyberchef.py` (release/asset selection,
+  missing/bad checksums, extraction, HTML/icon/worker/license/metadata presence,
+  unsafe paths/symlinks, modes/timestamps, clean replacement and failure
+  preservation, desktop entry validation, build syntax); `python3
+  tests/check_workflow_tags.py` (eight event/ref cases, plus CyberChef cache
+  argument); `XDG_RUNTIME_DIR=/tmp just check`; whitespace review.
+  desktop-file-validate reported only a hint that two main categories may show
+  the launcher in both menus, which is intentional.
+- Live smoke test passed using fresh GitHub metadata/license and the downloaded
+  official `v11.5.0` release ZIP:
+  `sha256:f6478925d3eaa16ec08626a85f5b85eed10d531a5e18700615fed7ecb024cccf`.
+  Installed into a temporary image root and verified the stable HTML link and
+  128x128 PNG icon. No release ZIP or extracted bundle was added to the repo.
+- Remaining: full container build/CI, deployed KDE menu/icon/default-browser
+  check, and disconnected-network tests for Base64, SHA-256/worker processing,
+  and file input. No local browser worker/launch check was performed.
+  Fixture repeat-install checks prove stable installed metadata, not actual OCI
+  layer/download sizes after rechunking. Direct Podman cache freshness requires
+  explicitly supplying the documented build argument.
+- [README.md](../README.md#cyberchef-offline-application) covers usage;
+  [DECISIONS.md](DECISIONS.md#cyberchef-offline-build--2026-10-15) records scope.
+
 ## ControlThings capture groups — 2026-10-15
 
 - Added `/usr/libexec/controlthings-groups`, an Aurora-style root setup script

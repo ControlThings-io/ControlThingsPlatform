@@ -1,5 +1,35 @@
 # Decisions
 
+## CyberChef offline build — 2026-10-15
+
+Accepted user choice: download the latest stable official CyberChef offline ZIP
+at build time, install its complete contents under `/usr/share/cyberchef/`, and
+provide a menu launcher and appropriate upstream icon. No webserver is needed.
+Use the [GitHub release API](https://api.github.com/repos/gchq/CyberChef/releases/latest)
+for asset discovery rather than scraping the live application or compiling Node
+sources. Require the release asset's SHA-256 and reject unsafe ZIP paths/symlinks
+or unexpected entry-point/icon layouts. Fetch the license from the same release
+tag and record version, asset URL/name, and checksum alongside installed files.
+
+Keep a stable `index.html` symlink to the versioned offline HTML. Install the
+bundled 128x128 CyberChef PNG into hicolor, and use `xdg-open` from a desktop entry
+in Utilities/Development. This honors the user's HTML application association,
+which normally selects their browser; actual desktop launching and offline
+worker operations remain integration validation, not established by extraction.
+
+Implementation: a separate Containerfile RUN step invokes a standard-library
+Python installer. `just build` supplies a fresh `CYBERCHEF_BUILD_EPOCH` argument
+after the package-install step to refresh latest without forcing DNF to rerun.
+Direct Podman builds need that argument refreshed explicitly. Normalize installed
+file timestamps to release publication time and record no build timestamp in
+metadata; identical release inputs should not cause timestamp-only payload churn.
+Changes to the selected release are intentionally not reproducible across build
+dates. A future pinned/classroom policy is a separate proposal, not implemented.
+
+Usage and verification are in [README.md](../README.md#cyberchef-offline-application);
+actual checks and remaining gaps are in
+[STATUS.md](STATUS.md#cyberchef-offline-build--2026-10-15).
+
 ## ControlThings capture groups — 2026-10-15
 
 Accepted user choice: mimic Aurora's group setup, using `controlthings-groups`

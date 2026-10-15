@@ -191,6 +191,42 @@ Wireshark's package configuration and the available hardware. See
 [validation status](docs/STATUS.md#controlthings-capture-groups--2026-10-15) and
 [decision](docs/DECISIONS.md#controlthings-capture-groups--2026-10-15).
 
+## CyberChef offline application
+
+CyberChef is bundled at `/usr/share/cyberchef/` and appears as **CyberChef** in
+the Utilities and Development menus. Its launcher uses `xdg-open` to open
+`file:///usr/share/cyberchef/index.html` in the configured HTML application,
+normally the default browser. No webserver or runtime download is required.
+The bundled upstream icon is installed in the standard hicolor icon theme.
+
+Each `just build` resolves the latest stable
+[official CyberChef release](https://github.com/gchq/CyberChef/releases/latest),
+downloads its offline ZIP, and verifies the asset's published SHA-256. A separate
+Containerfile step refreshes CyberChef without invalidating the package-install
+step. Direct Podman builds should pass a fresh
+`--build-arg CYBERCHEF_BUILD_EPOCH="$(date -u +%s%N)"` to request the same refresh
+behavior; otherwise normal layer caching applies.
+
+The complete ZIP is installed, preserving assets and workers. A stable
+`index.html` symlink points to the versioned HTML file. The matching upstream
+license is included as `LICENSE`, and `release.json` records the version, asset,
+download URL, and SHA-256. Installed timestamps use the release publication time
+so reinstalling the same release does not introduce timestamp-only changes.
+No downloaded ZIP is kept in the image or repository.
+
+[install-cyberchef.py](build_files/install-cyberchef.py) implements the download
+and extraction. GitHub/network errors, missing checksum metadata, checksum
+mismatches, unsafe archive paths, and unexpected HTML/icon layouts fail the build.
+CyberChef updates arrive through distro image updates, rather than independently
+updating this read-only installation. Since latest is resolved during the build,
+repeat builds may select newer releases.
+
+After deploying, disconnect networking, open the menu launcher, and check Base64
+encoding/decoding, a worker-based operation such as SHA-256, and file input.
+Verify the icon and the browser used. See
+[STATUS.md](docs/STATUS.md#cyberchef-offline-build--2026-10-15) for validation gaps
+and [DECISIONS.md](docs/DECISIONS.md#cyberchef-offline-build--2026-10-15) for rationale.
+
 ## Containerfile
 
 The [Containerfile](./Containerfile) defines the operations used to customize the selected image.This file is the entrypoint for your image build, and works exactly like a regular podman Containerfile. For reference, please see the [Podman Documentation](https://docs.podman.io/en/latest/Introduction.html).

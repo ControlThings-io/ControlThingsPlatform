@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=CyberChef
+Comment=Encode, decode, and analyze data offline
+Exec=xdg-open file:///usr/share/cyberchef/index.html
+Icon=cyberchef
+Terminal=false
+Categories=Utility;Development;
+Keywords=CyberChef;encoding;decoding;cryptography;analysis;
+StartupNotify=false

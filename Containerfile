@@ -36,6 +36,14 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=tmpfs,dst=/tmp \
     /ctx/build.sh
 
+# Refresh only the offline CyberChef installation on every `just build`.
+# Keep package installation independent of this changing build argument.
+ARG CYBERCHEF_BUILD_EPOCH=manual
+RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
+    --mount=type=tmpfs,dst=/tmp \
+    echo "Refreshing CyberChef (${CYBERCHEF_BUILD_EPOCH})" && \
+    python3 /ctx/install-cyberchef.py
+
 ### LINTING
 ## Verify final image and contents are correct.
 RUN bootc container lint

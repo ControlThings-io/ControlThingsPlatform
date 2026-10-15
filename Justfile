@@ -102,6 +102,7 @@ build $target_image=image_name $tag=default_tag:
     set -euox pipefail
 
     BUILD_ARGS=()
+    BUILD_ARGS+=("--build-arg" "CYBERCHEF_BUILD_EPOCH=$(date -u +%s%N)")
     LABELS=()
     if [[ -z "$(git status -s)" ]]; then
         GIT_SHA=$(git rev-parse --short HEAD)

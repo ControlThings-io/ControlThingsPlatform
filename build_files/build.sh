@@ -14,7 +14,9 @@ cp -avf "/ctx/system_files"/. /
 
 # this installs a package from fedora repos
 PACKAGES=(
+    python3
     wireshark
+    xdg-utils
     xdg-native-messaging-proxy
 )
 
