@@ -21,3 +21,21 @@ desktop default, not login-screen, lock-screen, or installer branding.
 
 See [README.md](../README.md#default-desktop-wallpaper) for configuration and
 [STATUS.md](STATUS.md) for validation and remaining work.
+
+## Default lock-screen background — 2026-10-14
+
+Accepted user choice: the lock-screen background should use
+`CT-Aquila-Aurea-Machina`. This supersedes the initial assumption that it should
+match the desktop. The desktop default remains
+`CT-De-Machina-Logica-Programmabilis`.
+
+Ship `kscreenlockerrc` in Aurora's existing
+`/usr/share/kde-settings/kde-profile/default/xdg` system-default directory. Host
+inspection confirms that Aurora includes this directory in `XDG_CONFIG_DIRS`.
+Override only its image-plugin and wallpaper/preview defaults. Do not write
+individual user profiles or mark settings immutable. User configuration takes
+precedence; existing users who inherit system defaults can see the change too.
+Do not alter locking behavior, authentication requirements, or the login screen.
+
+See [README.md](../README.md#default-lock-screen-background) for usage and
+[STATUS.md](STATUS.md) for validation gaps.

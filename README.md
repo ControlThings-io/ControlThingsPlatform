@@ -142,6 +142,21 @@ the wallpaper appears, a user-selected replacement survives logout/login, and
 an existing user's wallpaper stays unchanged. This setting controls desktop
 wallpaper; login-screen and installer branding are configured separately.
 
+## Default lock-screen background
+
+The lock screen defaults to **Aquila Aurea Machina** through
+[`system_files/usr/share/kde-settings/kde-profile/default/xdg/kscreenlockerrc`](system_files/usr/share/kde-settings/kde-profile/default/xdg/kscreenlockerrc).
+To select another bundled wallpaper, change both `Image` and `PreviewImage` to
+its package directory using a `file:///usr/share/wallpapers/` URL.
+The existing build script copies this file into Aurora's system configuration.
+
+Users who have saved their own lock-screen background keep that choice. Existing
+users who still inherit the system default may also see the new background.
+After deploying a rebuilt image, lock a fresh user's session to check it, then
+choose another background in Plasma's Screen Locking settings and verify that
+the choice survives another lock and a logout/login. This does not change the
+login screen shown before signing in, or locking and password requirements.
+
 ## Containerfile
 
 The [Containerfile](./Containerfile) defines the operations used to customize the selected image.This file is the entrypoint for your image build, and works exactly like a regular podman Containerfile. For reference, please see the [Podman Documentation](https://docs.podman.io/en/latest/Introduction.html).

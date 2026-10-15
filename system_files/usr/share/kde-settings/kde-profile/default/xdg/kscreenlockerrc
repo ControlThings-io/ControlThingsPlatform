@@ -1,0 +1,7 @@
+# System defaults; a user's saved kscreenlockerrc settings take precedence.
+[Greeter]
+WallpaperPlugin=org.kde.image
+
+[Greeter][Wallpaper][org.kde.image][General]
+Image=file:///usr/share/wallpapers/CT-Aquila-Aurea-Machina/
+PreviewImage=file:///usr/share/wallpapers/CT-Aquila-Aurea-Machina/

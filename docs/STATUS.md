@@ -1,8 +1,31 @@
 # Current status
 
+## Default lock-screen background — 2026-10-14
+
+Work is uncommitted on `main`, based on `560984f`. Desktop wallpaper work is now
+committed locally in that revision; the branch is one commit ahead of origin.
+
+- Added a system-default `kscreenlockerrc` through the `system_files/` overlay,
+  selecting `CT-Aquila-Aurea-Machina` per the user's corrected choice. The
+  desktop remains `CT-De-Machina-Logica-Programmabilis`. The existing build
+  script installs it; no new login/autostart script is needed.
+- Individual user settings remain higher priority. Existing users who inherit
+  system defaults can see the new background. Lock timing, authentication, and
+  the pre-login screen are unchanged.
+- Updated usage and rationale in [README.md](../README.md#default-lock-screen-background)
+  and [DECISIONS.md](DECISIONS.md#default-lock-screen-background--2026-10-14).
+- Validation passed using real `kreadconfig6`/`kwriteconfig6` against temporary
+  system/user directories: fresh configuration reads the image plugin, image,
+  and preview defaults; a saved user image takes precedence without modifying
+  system defaults. Verified the bundled asset path and absence of lock-timing
+  or password-policy settings. `git diff --check` passed.
+- Remaining validation: build/deploy the image, lock a fresh user's session,
+  and verify both the default image and persistence of a user's chosen image
+  through lock/unlock and logout/login. No visual lock-screen test performed.
+
 ## Default desktop wallpaper — 2026-10-14
 
-Work is uncommitted on `main`, based on `ecc50dc`. The user selected
+Committed locally on `main` in `560984f`. The user selected
 `CT-De-Machina-Logica-Programmabilis` as the default wallpaper for new users.
 
 ### Implemented
@@ -43,8 +66,8 @@ Work is uncommitted on `main`, based on `ecc50dc`. The user selected
    wallpaper. Change it, log out/in, and verify the selection persists.
 3. Verify a pre-existing user's selected wallpaper is preserved, plus the default
    on newly created desktops and Aurora's light-theme variant.
-4. Commit and push only when requested. Login-screen and installer branding are
-   separate future work; no changes to those surfaces are included here.
+4. Push only when requested. Login-screen and installer branding are separate
+   future work; no changes to those surfaces are included here.
 
 ## Dependency workflow follow-up
 
