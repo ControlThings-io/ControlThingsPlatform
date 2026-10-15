@@ -171,6 +171,19 @@ The [build.yml](./.github/workflows/build.yml) Github Actions workflow creates y
 
 # Building Disk Images
 
+To compare the compressed container layer sizes of two published tags without
+downloading their layers, run:
+
+```bash
+./scripts/compare-image-sizes.sh OLD_TAG NEW_TAG
+```
+
+This requires `skopeo`, `jq`, and `awk`. It queries the ControlThings GHCR
+repository for the host platform and reports both totals in GiB and the
+new-minus-old difference in MiB. These totals are not installed disk usage or
+the amount downloaded during an update. Registry access uses Skopeo's existing
+credentials when authentication is required.
+
 This template provides an out of the box workflow for creating disk images (ISO, qcow, raw) for your custom OCI image which can be used to directly install onto your machines.
 
 This template provides a way to upload the disk images that is generated from the workflow to a S3 bucket. The disk images will also be available as an artifact from the job, if you wish to use an alternate provider. To upload to S3 we use [rclone](https://rclone.org/) which is able to use [many S3 providers](https://rclone.org/s3/).

@@ -1,5 +1,16 @@
 # Current status
 
+## Container size comparison — 2026-10-15
+
+- Added executable `scripts/compare-image-sizes.sh OLD_TAG NEW_TAG` to query
+  ControlThings GHCR layer metadata and report compressed totals and size growth.
+  Usage and limitations are in [README.md](../README.md#building-disk-images).
+- Validation: Bash syntax and `git diff --check` passed. With mocked Skopeo
+  responses and real jq/awk, checked growth, shrinkage, equal sizes, invalid
+  arguments, incomplete metadata, and registry failure propagation.
+- No live GHCR comparison performed; next step is running against two published
+  tags with Skopeo available. ShellCheck is unavailable locally.
+
 ## Disk-image testing — 2026-10-14
 
 The user reports that the disk-image build succeeded and is downloading the
