@@ -122,6 +122,26 @@ This should queue your image for the next reboot, which you can do immediately a
 
 # Repository Contents
 
+## Default desktop wallpaper
+
+New users start with **De Machina Logica Programmabilis** on Aurora's KDE
+desktop. Existing desktops keep their selected wallpaper. New desktops created
+for additional monitors or activities also use this default while an Aurora
+global theme is selected.
+
+The wallpaper images and metadata live in
+[`system_files/usr/share/wallpapers/CT-De-Machina-Logica-Programmabilis/`](system_files/usr/share/wallpapers/CT-De-Machina-Logica-Programmabilis/).
+[`build_files/plasma-desktop.js`](build_files/plasma-desktop.js) selects that
+package. To choose another bundled wallpaper, change the package directory in
+its `Image` setting, keeping the absolute `/usr/share/wallpapers/` path.
+[`build_files/build.sh`](build_files/build.sh) installs this setup script into
+Aurora's dark and light global themes when building the image.
+
+Rebuild and deploy the image, then test with a fresh user profile. Verify that
+the wallpaper appears, a user-selected replacement survives logout/login, and
+an existing user's wallpaper stays unchanged. This setting controls desktop
+wallpaper; login-screen and installer branding are configured separately.
+
 ## Containerfile
 
 The [Containerfile](./Containerfile) defines the operations used to customize the selected image.This file is the entrypoint for your image build, and works exactly like a regular podman Containerfile. For reference, please see the [Podman Documentation](https://docs.podman.io/en/latest/Introduction.html).

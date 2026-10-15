@@ -20,6 +20,16 @@ PACKAGES=(
 
 dnf5 -y install "${PACKAGES[@]}"
 
+# Aurora's Folder View setup hook overrides the theme's default wallpaper.
+# Install one shared replacement for its dark and light themes, retaining their
+# other settings. Fail if the base image's theme layout changes unexpectedly.
+for theme in dev.getaurora.aurora.desktop dev.getaurora.auroralight.desktop; do
+    theme_dir="/usr/share/plasma/look-and-feel/${theme}"
+    test -d "${theme_dir}/contents/plasmoidsetupscripts"
+    install -m 0644 /ctx/plasma-desktop.js \
+        "${theme_dir}/contents/plasmoidsetupscripts/org.kde.plasma.folder.js"
+done
+
 # Use a COPR Example:
 #
 # dnf5 -y copr enable ublue-os/staging
