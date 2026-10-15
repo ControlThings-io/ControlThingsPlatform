@@ -196,25 +196,71 @@ new-minus-old difference in MiB. These totals are not installed disk usage or
 the amount downloaded during an update. Registry access uses Skopeo's existing
 credentials when authentication is required.
 
-This template provides an out of the box workflow for creating disk images (ISO, qcow, raw) for your custom OCI image which can be used to directly install onto your machines.
+The [Build disk images workflow](.github/workflows/build-disk.yml) runs manually
+and builds an interactive ISO installer and a QCOW2 VM disk for the selected
+**platform**: `amd64` (default) or `arm64`. Builds use native Ubuntu runners.
+Open **Actions → Build disk images → Run workflow**, select the platform, and supply a
+published channel (`latest`, `ics410_l01`, or `ics410-l01` if published with that
+spelling), or a dated tag such as `latest-20261015-5118339`. Channel names retain
+their exact spelling; hyphens and underscores are not aliases.
 
-This template provides a way to upload the disk images that is generated from the workflow to a S3 bucket. The disk images will also be available as an artifact from the job, if you wish to use an alternate provider. To upload to S3 we use [rclone](https://rclone.org/) which is able to use [many S3 providers](https://rclone.org/s3/).
+Both jobs use the same resolved container digest for the selected architecture. The filename date
+and hash come from the source container version label, never the workflow's
+checkout or the disk generation date. For example:
 
-## Setting Up ISO Builds
+- `controlthingsplatform-latest-20261015-5118339-amd64-installer.iso`
+- `controlthingsplatform-latest-20261015-5118339-amd64.qcow2`
 
-The [build-disk.yml](./.github/workflows/build-disk.yml) Github Actions workflow creates a disk image from your OCI image by utilizing the [bootc-image-builder](https://osbuild.org/docs/bootc/). In order to use this workflow you must complete the following steps:
+ARM64 outputs use `arm64` in place of `amd64`. The selected tag must publish a
+matching container architecture; disk generation cannot convert an AMD64
+container into ARM64. The container workflow currently builds AMD64 only, and
+the inspected `latest` tag has no ARM64 payload. Publish an ARM64 source before
+using that platform; the resolver fails early when it is missing.
 
-1. Modify `disk_config/iso.toml` to point to your custom container image before generating an ISO image.
-2. If you changed your image name from the default in `build.yml` then in the `build-disk.yml` file edit the `IMAGE_REGISTRY`, `IMAGE_NAME` and `DEFAULT_TAG` environment variables with the correct values. If you did not make changes, skip this step.
-3. Finally, if you want to upload your disk images to S3 then you will need to add your S3 configuration to the repository's Action secrets. This can be found by going to your repository settings, under `Secrets and Variables` -> `Actions`. You will need to add the following
-  - `S3_PROVIDER` - Must match one of the values from the [supported list](https://rclone.org/s3/)
-  - `S3_BUCKET_NAME` - Your unique bucket name
-  - `S3_ACCESS_KEY_ID` - It is recommended that you make a separate key just for this workflow
-  - `S3_SECRET_ACCESS_KEY` - See above.
-  - `S3_REGION` - The region your bucket lives in. If you do not know then set this value to `auto`.
-  - `S3_ENDPOINT` - This value will be specific to the bucket as well.
+Each download includes a `.sha256` file, `.source.json` metadata, and an osbuild
+manifest. Verify a downloaded image with `sha256sum -c FILENAME.sha256`.
+Metadata records the payload digest, requested tag, update reference, builder,
+and workflow run. Same-day container rebuilds can reuse date/hash tags; the
+recorded digest distinguishes their contents. Artifact names also contain the
+workflow run and attempt so the two formats and repeated runs remain separate.
 
-Once the workflow is done, you'll find the disk images either in your S3 bucket or as part of the summary under `Artifacts` after the workflow is completed.
+Installed systems follow their source channel: `latest` updates to `latest`,
+`ics410_l01` updates to `ics410_l01`, and `ics410-l01` updates to `ics410-l01`.
+Selecting a dated tag fixes the installation payload but still follows that
+tag's channel for future updates. The ISO embeds the selected payload and
+Anaconda installs from local container storage. Offline installation and first
+login still require VM validation.
+
+## Disk builder and configuration
+
+CI uses the pinned [image-builder CLI](https://github.com/osbuild/image-builder)
+container directly. The deprecated bootc-image-builder action cannot express the
+new generic installer configuration. The ISO uses `bootc-generic-iso` with a
+separate Fedora 44 Anaconda environment defined in
+[disk_config/installer/Containerfile](disk_config/installer/Containerfile), based
+on the [upstream generic ISO example](https://osbuild.org/docs/developer-guide/projects/image-builder/advanced/bootc/isos/).
+Its kickstart explicitly selects the embedded payload and channel update
+reference. The installer environment does not become the installed OS.
+
+QCOW2 uses the new CLI's `--image-size "20 GiB"` root minimum and Btrfs default.
+The existing `just build-iso`/`just build-qcow2` recipes and
+`disk_config/iso.toml`/`disk_config/disk.toml` still use the legacy local builder;
+this migration covers the GitHub disk workflow only.
+
+GitHub artifacts are always uploaded. Optionally select **Also upload to S3**;
+configure these repository Actions secrets:
+
+- `S3_PROVIDER`: an [rclone S3 provider](https://rclone.org/s3/).
+- `S3_BUCKET_NAME`: destination bucket.
+- `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`: credentials for that bucket.
+- `S3_REGION`: provider region, or `auto` where supported.
+- `S3_ENDPOINT`: provider endpoint.
+
+S3 files go under `SOURCE_TAG/RUN_ID-ATTEMPT/ARCHITECTURE/FORMAT/` to keep runs and formats
+separate. Build failures stop image upload. See
+[STATUS.md](docs/STATUS.md#disk-workflow-migration--2026-10-15) for validation gaps
+and [DECISIONS.md](docs/DECISIONS.md#disk-workflow-and-update-channels--2026-10-15)
+for accepted workflow choices.
 
 # Artifacthub
 

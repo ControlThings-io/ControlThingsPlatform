@@ -1,5 +1,54 @@
 # Current status
 
+## Disk workflow migration — 2026-10-15
+
+- Updated `.github/workflows/build-disk.yml` to manual builds with an AMD64/ARM64
+  selector and separate ISO and QCOW2 matrix outputs on native runners. A resolver
+  job shares one immutable source JSON with both jobs. Distinct artifact names
+  include run/attempt IDs; GitHub uploads always run, with optional S3 copies under
+  separate run/architecture/format paths. Removed the deprecated action and
+  unused OIDC permission.
+- Added `scripts/build-disk.py` for channel/dated-tag selection, architecture
+  selection, date/hash naming from container labels, pinned source
+  pulls, channel retagging in local storage, build orchestration, checksums, and
+  source metadata. Both formats follow the original channel after installation;
+  course hyphen/underscore spellings are preserved exactly.
+- CI now invokes the pinned new image-builder CLI directly. The generic ISO
+  uses a separate pinned Fedora 44 Anaconda environment in
+  `disk_config/installer/`, adapted from upstream's example, and embeds the
+  selected payload for local installation. QCOW2 retains Btrfs and a 20 GiB root
+  minimum. Existing local Justfile recipes/configs still use the legacy builder.
+  Added a Renovate matcher for the workflow builder pin. Installer packages
+  select x86 BIOS/EFI or ARM EFI components according to the requested platform.
+- Checks passed: `python3 tests/check_build_disk.py` (channel and dated tags,
+  invalid tags/labels/dates/architectures, multiarchitecture selection, both
+  formats, both architectures, and three channels, filenames/checksums/metadata,
+  five command failure stages, digest mismatch and missing output, manual
+  architecture selector/native runners, action pins, installer package selection
+  using mocked DNF, workflow shell syntax); Python AST and Containerfile shell syntax; ISO label
+  consistency; Renovate JSON parsing and dependency regex extraction;
+  `XDG_RUNTIME_DIR=/tmp just check`; `git diff --check`.
+- Live read-only AMD64 resolver passed against `latest`: version
+  `latest.20261015-5118339`, created `2026-10-15T19:22:11Z`, payload digest
+  `sha256:4c61d402916e44374fd88a782378191151b0dce800d657101321222c5b9a50de`.
+  Builder metadata and Fedora installer base digest were checked against public
+  registries; both pinned builder and installer-base indexes contain AMD64 and
+  ARM64 images. Live ARM64 resolution of `latest` correctly rejected its AMD64
+  payload. The container workflow currently publishes AMD64 only; an ARM64
+  source must be published before selecting ARM64 can build disks. These reads
+  do not establish build/boot success.
+- Remaining validation: first CI build of both formats on each available
+  architecture; install the ISO to a blank VM disk, remove ISO, verify boot/login
+  and `bootc status` channel;
+  boot QCOW2 and verify the same channel. Repeat ISO installation disconnected
+  from the network, then test an update on `latest` and a course channel.
+  New Anaconda/package/initramfs integration, remote CI, and S3 uploads have not
+  been tested. No full disk build performed locally; regression commands mock
+  Podman. Renovate's full validator was not run.
+- Accepted choices/rationale are in
+  [DECISIONS.md](DECISIONS.md#disk-workflow-and-update-channels--2026-10-15);
+  manual usage and filenames are in [README.md](../README.md#building-disk-images).
+
 ## Chunkah rechunking — 2026-10-15
 
 - Switched the container workflow to Chunkah. The recipe matches Aurora's
@@ -18,9 +67,10 @@
   config transfer, exact source selection, OCI import/tag/lint, cleanup);
   workflow YAML and sole Chunkah stage; Renovate configuration parsing and
   dependency regex extraction; `git diff --check`.
-- No actual Chunkah image build, final-image lint, VM boot/update, remote CI,
-  or post-migration download measurement performed. Mocked checks validate
-  orchestration only. Renovate's full config validator was not run.
+- User reports all commits, including Chunkah integration, worked. The exact
+  successful CI run was not recorded here. Previous local checks mocked the
+  orchestration; VM update/download measurements and Renovate's full config
+  validator remain unrecorded.
 - Next: build the image in CI; boot a QCOW2 and test updating an existing VM;
   verify labels, package inventory, wallpaper defaults, and absence of countme
   build state. Compare replacement-layer sizes across two fixed-input builds.
@@ -127,12 +177,10 @@ This report does not establish ISO or offline-installation success.
 
 - Pending: change both backgrounds and verify persistence through lock/unlock,
   logout/login, and reboot; verify an existing user's choices survive an update.
-- Next installer check: obtain the ISO, install to a blank VM disk, remove the
-  ISO, and verify boot and first login. Give matrix uploads distinct artifact
-  names first; the current default name plus overwrite can replace an output.
-- Source tracking: allow dated image tags, resolve the selected source once to
-  a digest shared by both disk jobs, and record source metadata with artifacts.
-  These workflow changes are proposed follow-ups, not implemented.
+- Next installer check: build the migrated ISO, install to a blank VM disk,
+  remove the ISO, and verify boot and first login. Distinct matrix artifact
+  names, dated source tags, shared digest selection, and source metadata are now
+  implemented in the [disk migration](#disk-workflow-migration--2026-10-15).
 - Offline classroom validation: repeat installation and first login with the
   VM network adapter disconnected, then run the required training tools.
 - Classroom account provisioning, managed home content, and bundled offline
@@ -220,10 +268,8 @@ Superseded PRs #8 and #9 are closed, as confirmed by the user on 2026-10-14.
 
 Outstanding work:
 
-- Disk workflow path filters still include leading `./` and the runner expression
-  defaults PRs to ARM while skipping ARM dependency installation.
-- A disk-image build succeeded per the user's report above. Record the workflow
-  run and artifact details; publishing behavior and untested artifact formats
-  still need validation.
-- Upstream deprecated `osbuild/bootc-image-builder-action`; migration to its
-  replacement requires separate input/output and ISO-feature review.
+- The disk workflow migration above replaces the old PR path filters, ARM
+  runner behavior, shared upload names, and deprecated builder action. The
+  newly migrated disk workflow still needs its first CI and VM validation.
+- The earlier disk-image build succeeded per the user's report above; its exact
+  run/artifact details remain unrecorded and do not validate the migrated ISO.

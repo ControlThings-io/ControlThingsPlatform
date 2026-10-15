@@ -1,5 +1,50 @@
 # Decisions
 
+## Disk workflow and update channels — 2026-10-15
+
+Accepted user choices: disk generation remains manual, offers AMD64 (default)
+and ARM64, and produces separate ISO installer and QCOW2 outputs. This supersedes
+the initial AMD64-only request. Filenames include the source container's date/hash
+tag. Installed machines follow the originating channel:
+`latest` follows `latest`; each `ics410` channel follows itself. Existing published
+course tags use underscores; support hyphens too without silently translating
+between different registry tags.
+
+Resolve the selected channel or dated tag once to a Linux manifest digest for
+the requested architecture. Build each format on a matching native runner.
+Reject unavailable architectures; disk generation does not cross-convert the
+container payload. The container workflow remains AMD64-only; publishing ARM64
+payloads is separate work. Installer package selection uses x86 BIOS/EFI packages
+for AMD64 and ARM EFI packages for ARM64.
+
+Derive the filename date/hash from the container's version label, since the disk
+workflow HEAD/date describe a different build, and the OCI revision label may be
+inherited from Aurora. Pull the exact digest in each job and tag it locally with
+the channel reference. The new builder defaults to local storage; never enable
+remote source resolution in these builds. QCOW2 uses that local name as its bootc
+target reference. Anaconda explicitly installs the embedded local payload while
+setting the channel as its target reference. Record the actual source digest
+because date/hash tags can be reused by same-day container rebuilds.
+
+Implementation choice: invoke the pinned new
+[image-builder CLI](https://github.com/osbuild/image-builder) directly. The
+[replacement action](https://github.com/osbuild/image-builder-action) lacks the
+output naming and generic installer configuration controls needed here. Follow
+upstream's [migration guide](https://github.com/osbuild/image-builder/blob/cad701ad3175da7297b20f61775fc269e58d2cfc/doc/20-advanced/20-bootc/50-migration.md)
+and recommended `bootc-generic-iso` path. A separate Fedora 44 Anaconda environment
+based on the [upstream example](https://osbuild.org/docs/developer-guide/projects/image-builder/advanced/bootc/isos/)
+embeds the untouched OS payload. The existing local Justfile builder migration
+is separate unfinished work, not part of this workflow change.
+
+Always upload separate GitHub artifacts, including checksums, source metadata,
+and manifests. Optional S3 uploads use run/attempt/architecture/format paths so rebuilding a
+date/hash tag cannot replace an earlier run's files. The installer environment
+and builder are digest-pinned; dependency updates remain managed by Renovate.
+The new installer must pass CI, boot, installation, offline, and channel-update
+checks before claiming those behaviors are validated. See
+[STATUS.md](STATUS.md#disk-workflow-migration--2026-10-15) and
+[README.md](../README.md#building-disk-images).
+
 ## Chunkah rechunking — 2026-10-15
 
 Accepted user choice: align container rechunking with Aurora. CI now calls
