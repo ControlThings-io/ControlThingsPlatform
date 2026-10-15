@@ -18,7 +18,8 @@ PACKAGES=(
     xdg-native-messaging-proxy
 )
 
-dnf5 -y install "${PACKAGES[@]}"
+# Build containers should not update repository usage-counting state.
+dnf5 -y --setopt='*.countme=false' install "${PACKAGES[@]}"
 
 # Aurora's Folder View setup hook overrides the theme's default wallpaper.
 # Install one shared replacement for its dark and light themes, retaining their
@@ -40,3 +41,12 @@ done
 #### Example for enabling a System Unit File
 
 systemctl enable podman.socket
+
+# Remove inherited counting cookies after package operations, before rechunking.
+# Tiny changes here otherwise invalidate the large unpackaged-content layer.
+# Limit cleanup to regular per-repository cookies; retain other DNF state and
+# installed-system repository settings. Missing state is normal on fresh images.
+if [[ -d /var/lib/dnf/repos ]]; then
+    find /var/lib/dnf/repos -mindepth 2 -maxdepth 2 \
+        -type f -name countme -delete
+fi

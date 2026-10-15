@@ -1,5 +1,24 @@
 # Current status
 
+## Build-time DNF counting cleanup — 2026-10-15
+
+- Implemented the accepted countme fix in `build_files/build.sh`: command-scoped
+  counting override for installation, followed by removal of inherited regular
+  per-repository counting cookies at the end of the build script. Other DNF
+  state and installed-system repository configuration are preserved.
+- Rationale is in [DECISIONS.md](DECISIONS.md#build-time-dnf-counting-state--2026-10-15);
+  usage is in [README.md](../README.md#buildsh).
+- Validation passed: `bash -n build_files/build.sh`, `git diff --check`, execution
+  of the actual cleanup block in a temporary fixture (missing directory,
+  targeted deletion, retained neighboring/nested files, symlink protection,
+  and repeat execution), plus mocked execution of the actual install command
+  confirming literal wildcard option and unchanged package arguments.
+- Remaining: build/publish a cleaned image, verify normal VM boot and package
+  inventory, then compare two builds using identical pinned inputs to confirm
+  the large unpackaged-content layer stays identical. No container build or
+  measured post-fix update performed. A first replacement download is expected;
+  RPM/DNF database churn is still separate outstanding work.
+
 ## Exact image update analysis — 2026-10-15
 
 The user corrected the source pair; this replaces the earlier July-to-October
@@ -35,8 +54,8 @@ The two countme files together change from 24 to 38 bytes but invalidate a
 commit objects change as a consequence of the changed file objects and rebuild.
 There are no observed application/kernel payload changes in this pair.
 
-Proposed follow-ups (not implemented): prevent/remove build-time countme state
-before rechunking; investigate reproducible RPM/DNF database handling while
+Build-time countme prevention/cleanup is implemented above. Proposed remaining
+follow-ups: investigate reproducible RPM/DNF database handling while
 preserving package inventory; isolate frequently changing state from large stable
 content if needed; validate with two builds of the same pinned inputs. DNF countme
 semantics and configuration are in the
@@ -46,7 +65,7 @@ validated fix.
 
 The 591.308 MB estimate explains the bulk of the reported roughly 600 MB update;
 exact network traffic above that amount remains unmeasured without VM update
-logs. No pipeline/runtime changes made. `git diff --check` passed. Raw manifests,
+logs. The analysis itself made no pipeline/runtime changes. Raw manifests,
 configurations, temporary inspection scripts, and file hash inventories are in
 `/tmp/ct-image-analysis` for this session only; no downloaded archives were kept.
 

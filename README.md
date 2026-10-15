@@ -165,6 +165,15 @@ The [Containerfile](./Containerfile) defines the operations used to customize th
 
 The [build.sh](./build_files/build.sh) file is called from your Containerfile. It is the best place to install new packages or make any other customization to your system. There are customization examples contained within it for your perusal.
 
+Build-time DNF installation disables repository usage counting (`countme`). At
+the end of the script, per-repository counting files inherited from the base
+image are removed so small bookkeeping changes do not force large layer
+downloads on updates. Installed-system repository settings remain inherited.
+Use the same counting override for additional build-time DNF commands and keep
+cleanup after all package operations. See the
+[decision](docs/DECISIONS.md#build-time-dnf-counting-state--2026-10-15) and
+[validation status](docs/STATUS.md#build-time-dnf-counting-cleanup--2026-10-15).
+
 ## build.yml
 
 The [build.yml](./.github/workflows/build.yml) Github Actions workflow creates your custom OCI image and publishes it to the Github Container Registry (GHCR). By default, the image name will match the Github repository name.

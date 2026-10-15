@@ -1,5 +1,24 @@
 # Decisions
 
+## Build-time DNF counting state — 2026-10-15
+
+Accepted: disable `countme` for build-time package installation and remove
+inherited per-repository counting cookies before rechunking. Analysis of two
+otherwise matching builds found that two cookies totaling 38 bytes invalidated
+a 409.844 MiB compressed layer. See [STATUS.md](STATUS.md#exact-image-update-analysis--2026-10-15)
+for the source digests and findings.
+
+Use a command-scoped repository override (`--setopt='*.countme=false'`), retaining
+installed-system repository configuration. At the end of `build_files/build.sh`,
+remove only regular `countme` files directly inside repository directories under
+`/var/lib/dnf/repos`, without following symlinks. A missing directory is allowed;
+cleanup errors fail the build. Preserve RPM inventory, DNF transaction history,
+and other repository state. Database reproducibility remains separate work.
+
+This targets repeated layer churn; the first cleaned image can still require a
+replacement download. Repeated builds with fixed inputs must establish the
+actual savings. Usage is in [README.md](../README.md#buildsh).
+
 ## Default desktop wallpaper — 2026-10-14
 
 Accepted user choice: new users should receive
