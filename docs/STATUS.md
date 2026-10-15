@@ -1,5 +1,31 @@
 # Current status
 
+## Chunkah rechunking — 2026-10-15
+
+- Switched the container workflow to Chunkah. The recipe matches Aurora's
+  256-layer packing limit and OCI-directory import approach, transfers metadata
+  from the exact source tag, prunes embedded OSTree data/removes stale labels,
+  cleans temporary files, and lints the retagged bootc image.
+- Pinned Aurora's reviewed builder digest; verified its public Quay image
+  configuration is available (amd64, `/usr/bin/chunkah` entrypoint). Added a
+  Renovate custom manager for digest updates. Legacy `ostree-rechunk` remains
+  available for comparisons. Usage/rationale are in
+  [README.md](../README.md#rechunking) and
+  [DECISIONS.md](DECISIONS.md#chunkah-rechunking--2026-10-15).
+- Checks passed: `XDG_RUNTIME_DIR=/tmp just check`; workflow tag regression
+  checks for eight events/refs including Chunkah shell syntax;
+  `python3 tests/check_rechunk.py` (three tags, success and five failure stages,
+  config transfer, exact source selection, OCI import/tag/lint, cleanup);
+  workflow YAML and sole Chunkah stage; Renovate configuration parsing and
+  dependency regex extraction; `git diff --check`.
+- No actual Chunkah image build, final-image lint, VM boot/update, remote CI,
+  or post-migration download measurement performed. Mocked checks validate
+  orchestration only. Renovate's full config validator was not run.
+- Next: build the image in CI; boot a QCOW2 and test updating an existing VM;
+  verify labels, package inventory, wallpaper defaults, and absence of countme
+  build state. Compare replacement-layer sizes across two fixed-input builds.
+  A larger first migration download is possible; RPM/DNF database churn remains.
+
 ## Weekly container build schedule — 2026-10-15
 
 - Changed `.github/workflows/build.yml` from daily 10:05 UTC to Saturdays at

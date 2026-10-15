@@ -9,6 +9,9 @@ export image_logo_url := env_var("IMAGE_LOGO_URL")
 export default_tag := env_var("DEFAULT_TAG")
 export bib_image := env_var("BIB_IMAGE")
 
+# Match Aurora's pinned Chunkah builder; Renovate maintains the digest.
+chunkah_image := "quay.io/coreos/chunkah:latest@sha256:8b56578258d1d10d3e1c7b0f71a4d05317c5fde331c4f483576a1b60e65f0cea"
+
 alias build-vm := build-qcow2
 alias rebuild-vm := rebuild-qcow2
 alias run-vm := run-vm-qcow2
@@ -126,27 +129,36 @@ build $target_image=image_name $tag=default_tag:
 
     podman build "${PODMAN_BUILD_ARGS[@]}" .
 
-# Split the image for smaller updates (New)!
+# Repack TARGET_IMAGE:TAG with Chunkah, preserving its image configuration.
+# Use Aurora's 256-layer limit and plain bootc layout; remove stale OSTree labels.
+# Temporary OCI output is cleaned on success/failure. Retag only after import;
+# propagate inspection, builder, import, tagging, and final bootc lint failures.
 rechunk $target_image=image_name $tag=default_tag:
     #!/usr/bin/env bash
 
     set -xeuo pipefail
 
-    # TODO: pin chunkah image to hash once mature enough
-    # You may run into space issues on github runenrs as we are making a
-    # complete copy of the image
-    export CHUNKAH_CONFIG_STR=$(podman inspect "${target_image}")
-    podman run --rm --mount=type=image,src="${target_image}",target=/chunkah \
-    -e CHUNKAH_CONFIG_STR quay.io/coreos/chunkah:latest \
+    work_dir=$(mktemp -d)
+    trap 'rm -rf "$work_dir"' EXIT
+    mkdir "$work_dir/output"
+    podman inspect "${target_image}:${tag}" > "$work_dir/config.json"
+    podman run --rm --mount=type=image,src="${target_image}:${tag}",target=/chunkah \
+    -v "$work_dir/config.json:/chunkah-config.json:ro,Z" \
+    -v "$work_dir/output:/run/out:Z" \
+    "{{ chunkah_image }}" \
     build \
     --verbose \
     --compressed \
-    --max-layers 128 \
+    --max-layers 256 \
     --prune /sysroot/ \
     --label ostree.commit- --label ostree.final-diffid- \
-    --tag "${target_image}:${tag}" | podman load
+    --config /chunkah-config.json \
+    --output oci:/run/out/chunked
+    chunked_image=$(podman pull "oci:${work_dir}/output/chunked")
+    podman tag "$chunked_image" "${target_image}:${tag}"
+    podman run --rm --entrypoint bootc "${target_image}:${tag}" container lint
 
-# Split the image for smaller updates (Classical)!
+# Legacy rpm-ostree rechunker retained for explicit comparison/rollback builds.
 ostree-rechunk $target_image=image_name $tag=default_tag:
     #!/usr/bin/env bash
 

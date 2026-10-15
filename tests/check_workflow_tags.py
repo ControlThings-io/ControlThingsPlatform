@@ -52,7 +52,7 @@ with tempfile.TemporaryDirectory(prefix='ct-pr3-tests-') as temp:
         tags = subprocess.run(['just', 'generate-build-tags', 'controlthingsplatform', actual],
                               env=env, capture_output=True, text=True, check=True).stdout.split()
         assert actual in tags and all(tag_pattern.fullmatch(tag) for tag in tags), tags
-        for recipe in ('build', 'ostree-rechunk'):
+        for recipe in ('build', 'rechunk', 'ostree-rechunk'):
             result = subprocess.run(['just', '--dry-run', recipe, 'controlthingsplatform', actual],
                                     env=env, capture_output=True, text=True, check=True)
             subprocess.run(['bash', '-n'], input=result.stdout + result.stderr,

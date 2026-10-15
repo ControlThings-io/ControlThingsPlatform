@@ -256,28 +256,44 @@ Arguments:
 - `$tag`: The tag for the image (default: `$default_tag`).
 
 ### Rechunking
-We can flatten the layers of container images to make sure there isn't a single huge layer when your image gets published.
-This does not make your image faster to download, just provides better resumability.
-
-#### `just ostree-rechunk`
-Rechunks the existing Image with [rpm-ostree](https://coreos.github.io/rpm-ostree/build-chunked-oci/)
-
-```bash
-just ostree-rechunk $target_image $tag
-```
 
 #### `just rechunk`
-Rechunks the existing Image with [chunkah](https://github.com/coreos/chunkah), this is probably gonna be the default here at some point, try it out, it's cool.
+
+The container workflow uses [Chunkah](https://github.com/coreos/chunkah), matching
+Aurora's approach. It reorganizes the finished filesystem into up to 256 layers
+so unchanged layers can be reused during updates. It preserves the selected
+image's configuration, removes embedded OSTree data and stale OSTree labels,
+imports the temporary OCI output, and retags the result under the same name/tag.
+The recipe then runs `bootc container lint` on the result.
 
 ```bash
 just rechunk $target_image $tag
 ```
 
+Build and rechunk using the same user's Podman storage. The builder image is
+digest-pinned in `Justfile`, with updates managed by Renovate. Temporary files
+are cleaned on success or failure. Changing layer layouts can require a larger
+first update; subsequent download savings need measurement. Rechunking does not
+eliminate changes inside RPM/DNF databases.
+
+#### `just ostree-rechunk`
+
+The previous [rpm-ostree rechunker](https://coreos.github.io/rpm-ostree/build-chunked-oci/)
+remains available for explicit comparison or rollback builds; CI uses Chunkah.
+
+```bash
+sudo just ostree-rechunk $target_image $tag
+```
+
+See [DECISIONS.md](docs/DECISIONS.md#chunkah-rechunking--2026-10-15) for rationale
+and [STATUS.md](docs/STATUS.md#chunkah-rechunking--2026-10-15) for validation gaps.
+
 ### Switching to the locally built image for testing
 
 The image has to be in the containers-storage owned by root, to be able to rebase to it, see the `_rootful_load_image` recipe.
 
-`sudo just build` and `sudo just ostree-rechunk` builds directly as root and allows you to skip the transfer to the root containers-storage.
+`sudo just build` and `sudo just rechunk` use root's container storage directly,
+allowing you to skip the transfer from user storage.
 
 You can rebase to all the images that are in your containers-storage:
 

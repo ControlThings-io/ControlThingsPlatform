@@ -1,5 +1,28 @@
 # Decisions
 
+## Chunkah rechunking — 2026-10-15
+
+Accepted user choice: align container rechunking with Aurora. CI now calls
+`just rechunk` using Chunkah in place of `just ostree-rechunk`. Follow Aurora's
+[recipe](https://github.com/ublue-os/aurora/blob/main/Justfile): 256-layer maximum,
+compressed OCI directory output, full source configuration transfer, pruning
+`/sysroot/` contents, and removing `ostree.commit`/`ostree.final-diffid` labels.
+Use the exact supplied image tag for inspection and mounting. Import before
+retagging, clean temporary files on failures, and lint the final bootc image.
+
+Pin the builder to the digest found in Aurora's
+[image versions](https://github.com/ublue-os/aurora/blob/main/image-versions.yml)
+at this review: `sha256:8b56578258d1d10d3e1c7b0f71a4d05317c5fde331c4f483576a1b60e65f0cea`.
+Renovate maintains this pin through a custom Docker dependency matcher in
+`Justfile`; future updates are independent of Aurora's exact update timing.
+Keep the legacy recipe for explicit comparisons; this supersedes its use in CI.
+
+This aligns tooling and packing settings with the base project's approach, but
+does not establish smaller downloads or fix RPM/DNF state reproducibility.
+The first update may replace many layers. Boot/update compatibility and
+repeat-build download sizes require integration validation. See
+[README.md](../README.md#rechunking) and [STATUS.md](STATUS.md#chunkah-rechunking--2026-10-15).
+
 ## Weekly container builds — 2026-10-15
 
 Accepted user choice: replace daily scheduled container builds with Saturdays
