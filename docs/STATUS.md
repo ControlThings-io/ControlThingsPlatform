@@ -1,5 +1,55 @@
 # Current status
 
+## Exact image update analysis — 2026-10-15
+
+The user corrected the source pair; this replaces the earlier July-to-October
+comparison, which did not describe the reported VM update. Inspected GHCR
+manifests/configuration and streamed the four differing layers from each image
+without extracting or executing archive contents. Compared file SHA-256 hashes,
+archive metadata, and resolved OSTree hardlinks (linux/amd64):
+
+- Old: `sha256:dbbbac9ce0776c5b4113d828ee5a09f2253867aaa36b01880907990b8cbff04f`,
+  created `2026-10-15T03:29:37Z`; 128 layers, 6,373,436,976 compressed bytes.
+- New: `sha256:5624508b4900aa4caba25d67ff0fff0e18519a3ce4114d08f627ca8fa9a07a7f`,
+  created `2026-10-15T14:49:56Z`; 128 layers, 6,373,375,825 compressed bytes.
+- Both identify `latest.20261015-9cd857d`, kernel `7.2.5-200.fc44.x86_64`, and
+  the same RPM input hash. Package component descriptions match; only the OSTree
+  commit description differs. Date-plus-source tags cannot distinguish these
+  same-day rebuilds; record digests.
+- Shared: 124 layer digests / 5,782,067,685 bytes. Four replacement layers total
+  591,308,140 bytes (591.308 MB / 563.915 MiB). Net size shrinks by 61,151 bytes.
+  Raw manifests corroborate inspected sizes. All four uncompressed identities
+  change too; this is not compression-only churn.
+
+| Layer | New compressed bytes | File-level finding |
+| --- | ---: | --- |
+| 0: OSTree export metadata | 12,923,584 | Changed commit/directory-tree objects; no visible file changes |
+| 17: RPM component | 54,428,743 | Only `usr/share/rpm/rpmdb.sqlite` and its `-shm` file change |
+| 100: 33 components | 94,203,536 | Only DNF transaction-history SQLite database, `-shm`, and `-wal` change |
+| 126: unpackaged content/initramfs | 429,752,277 | Only two tiny DNF repository `countme` files change; initramfs contents are unchanged |
+
+The seven differing visible files are package-manager state. RPM database size
+is unchanged at 154,591,232 bytes; DNF history files also retain their sizes.
+The two countme files together change from 24 to 38 bytes but invalidate a
+409.844 MiB layer, 72.68% of replacement-layer bytes. The directory-tree and
+commit objects change as a consequence of the changed file objects and rebuild.
+There are no observed application/kernel payload changes in this pair.
+
+Proposed follow-ups (not implemented): prevent/remove build-time countme state
+before rechunking; investigate reproducible RPM/DNF database handling while
+preserving package inventory; isolate frequently changing state from large stable
+content if needed; validate with two builds of the same pinned inputs. DNF countme
+semantics and configuration are in the
+[DNF5 reference](https://dnf5.readthedocs.io/en/latest/dnf5.conf.5.html).
+Simply increasing the layer limit or replacing the rechunker is not yet a
+validated fix.
+
+The 591.308 MB estimate explains the bulk of the reported roughly 600 MB update;
+exact network traffic above that amount remains unmeasured without VM update
+logs. No pipeline/runtime changes made. `git diff --check` passed. Raw manifests,
+configurations, temporary inspection scripts, and file hash inventories are in
+`/tmp/ct-image-analysis` for this session only; no downloaded archives were kept.
+
 ## Container size comparison — 2026-10-15
 
 - Added executable `scripts/compare-image-sizes.sh OLD_TAG NEW_TAG` to query
@@ -11,15 +61,21 @@
 - No live GHCR comparison performed; next step is running against two published
   tags with Skopeo available. ShellCheck is unavailable locally.
 
-## Disk-image testing — 2026-10-14
+## Disk-image testing — 2026-10-15
 
-The user reports that the disk-image build succeeded and is downloading the
-artifact for additional testing. The workflow run, source image revision, and
-artifact format have not yet been recorded; this report does not establish ISO
-or offline-installation success.
+The user confirmed that the downloaded QCOW2 image works and that new users
+receive the expected desktop and lock-screen backgrounds. The workflow run,
+source container digest, dated tag, and architecture have not yet been recorded.
+This report does not establish ISO or offline-installation success.
 
-- Pending: boot/install the downloaded artifact in a VM, verify first login,
-  default desktop and lock-screen backgrounds, and persistence of user choices.
+- Pending: change both backgrounds and verify persistence through lock/unlock,
+  logout/login, and reboot; verify an existing user's choices survive an update.
+- Next installer check: obtain the ISO, install to a blank VM disk, remove the
+  ISO, and verify boot and first login. Give matrix uploads distinct artifact
+  names first; the current default name plus overwrite can replace an output.
+- Source tracking: allow dated image tags, resolve the selected source once to
+  a digest shared by both disk jobs, and record source metadata with artifacts.
+  These workflow changes are proposed follow-ups, not implemented.
 - Offline classroom validation: repeat installation and first login with the
   VM network adapter disconnected, then run the required training tools.
 - Classroom account provisioning, managed home content, and bundled offline
@@ -27,8 +83,7 @@ or offline-installation success.
 
 ## Default lock-screen background — 2026-10-14
 
-Committed on `main` in `9cd857d`. At this review, local `main` matches the
-locally recorded `origin/main`.
+Committed on `main` in `9cd857d`.
 
 - Added a system-default `kscreenlockerrc` through the `system_files/` overlay,
   selecting `CT-Aquila-Aurea-Machina` per the user's corrected choice. The
@@ -44,9 +99,9 @@ locally recorded `origin/main`.
   and preview defaults; a saved user image takes precedence without modifying
   system defaults. Verified the bundled asset path and absence of lock-timing
   or password-policy settings. `git diff --check` passed.
-- Remaining validation: build/deploy the image, lock a fresh user's session,
-  and verify both the default image and persistence of a user's chosen image
-  through lock/unlock and logout/login. No visual lock-screen test performed.
+- User confirmed the default lock-screen background works for new users in the
+  QCOW2 image on 2026-10-15. Remaining: verify persistence of a user's chosen
+  replacement through lock/unlock, logout/login, and reboot.
 
 ## Default desktop wallpaper — 2026-10-14
 
@@ -82,16 +137,15 @@ Committed on `main` in `560984f`. The user selected
 - Inspected the host's Aurora theme setup hooks and KDE's `ShellCorona` source:
   the hook is invoked on containment creation. The host files are evidence for
   the implementation, not proof of the exact contents of a future stable image.
-- No image build, deployment, or live Plasma login test performed for this work.
+- User confirmed the QCOW2 image works and new users receive the expected
+  desktop wallpaper on 2026-10-15; source digest remains unrecorded.
 
 ### Next steps
 
-1. Build the image and verify both expected theme hooks are installed.
-2. In a VM running that image, sign in with a fresh user and check the default
-   wallpaper. Change it, log out/in, and verify the selection persists.
-3. Verify a pre-existing user's selected wallpaper is preserved, plus the default
+1. Change the desktop wallpaper, log out/in, and reboot to verify persistence.
+2. Verify a pre-existing user's selected wallpaper is preserved, plus the default
    on newly created desktops and Aurora's light-theme variant.
-4. Push only when requested. Login-screen and installer branding are separate
+3. Push only when requested. Login-screen and installer branding are separate
    future work; no changes to those surfaces are included here.
 
 ## Dependency workflow follow-up
