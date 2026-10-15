@@ -1,9 +1,23 @@
 # Current status
 
+## Disk-image testing — 2026-10-14
+
+The user reports that the disk-image build succeeded and is downloading the
+artifact for additional testing. The workflow run, source image revision, and
+artifact format have not yet been recorded; this report does not establish ISO
+or offline-installation success.
+
+- Pending: boot/install the downloaded artifact in a VM, verify first login,
+  default desktop and lock-screen backgrounds, and persistence of user choices.
+- Offline classroom validation: repeat installation and first login with the
+  VM network adapter disconnected, then run the required training tools.
+- Classroom account provisioning, managed home content, and bundled offline
+  Python/Homebrew dependencies remain proposals, not implemented features.
+
 ## Default lock-screen background — 2026-10-14
 
-Work is uncommitted on `main`, based on `560984f`. Desktop wallpaper work is now
-committed locally in that revision; the branch is one commit ahead of origin.
+Committed on `main` in `9cd857d`. At this review, local `main` matches the
+locally recorded `origin/main`.
 
 - Added a system-default `kscreenlockerrc` through the `system_files/` overlay,
   selecting `CT-Aquila-Aurea-Machina` per the user's corrected choice. The
@@ -25,7 +39,7 @@ committed locally in that revision; the branch is one commit ahead of origin.
 
 ## Default desktop wallpaper — 2026-10-14
 
-Committed locally on `main` in `560984f`. The user selected
+Committed on `main` in `560984f`. The user selected
 `CT-De-Machina-Logica-Programmabilis` as the default wallpaper for new users.
 
 ### Implemented
@@ -72,19 +86,22 @@ Committed locally on `main` in `560984f`. The user selected
 ## Dependency workflow follow-up
 
 The combined dependency updates and PR image-tag fix are now on `main` in
-`ecc50dc` (PR #3). Its CI run
+`ecc50dc` (PR #3). The user confirmed on 2026-10-14 that the combined PR #3
+workflow passed. The previously recorded CI run
 [38663972331](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/38663972331)
 passed build, rechunking, and tagging at PR head `5b4bff6`. Registry login,
 publishing, and signing were skipped on the PR event. The old PR tag regression
 originated in project commit `334bf00`, which used `GITHUB_REF_NAME` for every
 non-main event, including slash-containing PR merge refs.
 
+Superseded PRs #8 and #9 are closed, as confirmed by the user on 2026-10-14.
+
 Outstanding work:
 
 - Disk workflow path filters still include leading `./` and the runner expression
   defaults PRs to ARM while skipping ARM dependency installation.
-- Disk-image builder, artifact upload, and publishing behavior need actual
-  workflow validation. Container CI does not establish their success.
+- A disk-image build succeeded per the user's report above. Record the workflow
+  run and artifact details; publishing behavior and untested artifact formats
+  still need validation.
 - Upstream deprecated `osbuild/bootc-image-builder-action`; migration to its
   replacement requires separate input/output and ISO-feature review.
-- Closure of superseded PRs #8 and #9 has not been rechecked during wallpaper work.
