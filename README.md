@@ -178,6 +178,9 @@ cleanup after all package operations. See the
 
 The [build.yml](./.github/workflows/build.yml) Github Actions workflow creates your custom OCI image and publishes it to the Github Container Registry (GHCR). By default, the image name will match the Github repository name.
 
+Scheduled container builds run weekly on Saturdays at 23:00 UTC. GitHub may
+delay scheduled runs. Push, pull-request, and manual triggers also remain active.
+
 # Building Disk Images
 
 To compare the compressed container layer sizes of two published tags without

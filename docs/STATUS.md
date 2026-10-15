@@ -1,5 +1,17 @@
 # Current status
 
+## Weekly container build schedule — 2026-10-15
+
+- Changed `.github/workflows/build.yml` from daily 10:05 UTC to Saturdays at
+  23:00 UTC (`0 23 * * 6`). Push, pull-request, and manual triggers are retained.
+- Updated [usage](../README.md#buildyml) and
+  [decision](DECISIONS.md#weekly-container-builds--2026-10-15).
+- Validation: YAML parsing, exact schedule and trigger checks, confirmation that
+  only the schedule line changed in the workflow, and `git diff --check` passed.
+- Pending: publish the change to the default branch when authorized, then
+  observe a scheduled run. No remote schedule change or workflow run performed;
+  GitHub may start scheduled events late.
+
 ## Build-time DNF counting cleanup — 2026-10-15
 
 - Implemented the accepted countme fix in `build_files/build.sh`: command-scoped

@@ -1,5 +1,13 @@
 # Decisions
 
+## Weekly container builds — 2026-10-15
+
+Accepted user choice: replace daily scheduled container builds with Saturdays
+at 23:00 UTC (`0 23 * * 6`). Keep push, pull-request, and manual triggers.
+This reduces scheduled rebuild frequency; GitHub scheduling delays still apply.
+See [README.md](../README.md#buildyml) for usage and
+[STATUS.md](STATUS.md#weekly-container-build-schedule--2026-10-15) for validation.
+
 ## Build-time DNF counting state — 2026-10-15
 
 Accepted: disable `countme` for build-time package installation and remove
