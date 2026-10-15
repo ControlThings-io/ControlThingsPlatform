@@ -14,10 +14,14 @@ cp -avf "/ctx/system_files"/. /
 
 # this installs a package from fedora repos
 PACKAGES=(
+    binwalk
+    lynis
+    netcat
     python3
     wireshark
     xdg-utils
     xdg-native-messaging-proxy
+    uv
 )
 
 # Build containers should not update repository usage-counting state.
