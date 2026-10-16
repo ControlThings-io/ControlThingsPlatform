@@ -1,0 +1,19 @@
+# Used only by build-disk.py; never published as a channel update image.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE} AS tools-builder
+RUN dnf5 -y --setopt='*.countme=false' install python3 flatpak ostree tar zstd util-linux shadow-utils
+
+# Read the manifest/helper from the selected OS digest, not workflow HEAD.
+RUN test -f /usr/share/ublue-os/homebrew/controlthings.Brewfile && \
+    test -f /usr/share/ublue-os/homebrew/system-flatpaks.Brewfile && \
+    test -x /usr/libexec/controlthings-tools || \
+    { echo 'Select a ControlThings container with Aurora defaults, the tools manifest and helper.' >&2; exit 1; }
+COPY build-tools.sh /build-tools.sh
+RUN bash /build-tools.sh
+
+FROM ${BASE_IMAGE}
+# bootc installs image /var content on initial installation and preserves it on
+# upgrades. Keep prepared stores out of the published OS image and out of /usr.
+COPY --chown=1000:1000 --from=tools-builder /var/home/linuxbrew /var/home/linuxbrew
+COPY --from=tools-builder /var/lib/flatpak /var/lib/flatpak
+COPY --from=tools-builder /out/installed.json /var/lib/controlthings/tools/installed.json

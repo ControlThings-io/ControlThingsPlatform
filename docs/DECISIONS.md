@@ -1,5 +1,80 @@
 # Decisions
 
+## Bundled Homebrew and Flatpak tools — 2026-10-15
+
+Accepted, as clarified by the user: prepare the requested apps only in the manual
+ISO/QCOW2 disk workflow. Normal container builds ship the shared manifest and
+explicit installer, with no ControlThings app archives or automatic seeding
+service. This supersedes the initial implementation that carried archives under
+`/usr` in every published OS image. Sharing that cache across disk formats did
+not justify its storage/update cost for existing machines.
+
+Follow Aurora's separation: its [ISO workflow](https://github.com/get-aurora-dev/iso/blob/main/.github/workflows/reusable-build-iso-anaconda.yml)
+prepares Flatpaks and its [installer hook](https://github.com/get-aurora-dev/iso/blob/main/iso_files/configure_iso_anaconda.sh)
+copies the populated store into the target. Aurora's inherited
+[Homebrew bootstrap](https://github.com/ublue-os/brew/blob/373e0ac907ba33269522e37fd38f45894f1bd984/Containerfile)
+remains in the normal OS; it is not the requested application bundle.
+
+Accepted follow-up: both disk formats must include Aurora's default Flatpaks
+alongside ControlThings' tools. Read only `system-flatpaks.Brewfile` from the
+selected OS, matching Aurora's ISO workflow, and merge/deduplicate its IDs with
+`controlthings.Brewfile`. Do not scan or execute optional upstream Brewfiles.
+Aurora's CLI is [opt-in](https://docs.getaurora.dev/guides/aurora-cli/), and its
+developer-mode recipe separately asks about the DX Flatpak bundle. Those bundles
+and fonts remain excluded, even with the Aurora DX base. Preserve all packages
+already in Aurora's Homebrew bootstrap; add only the requested ControlThings
+formulae. There is no default Aurora Homebrew app bundle to install separately.
+
+Implementation choice for ARM64: Aurora's official default selection targets
+AMD64, so use its available native subset on ARM64. Check a complete Flathub
+app/runtime catalog before package installation, fail on lookup errors or missing
+custom apps, and record/warn about omitted ARM64 defaults (currently Thunderbird).
+This follows the user's earlier ZAP architecture exception without hardcoding
+a permanent Thunderbird exclusion. AMD64 requires every listed default. Record
+both source manifest hashes and actual selected IDs, alongside installed versions.
+
+For both disk formats, derive a disposable local image from the verified source
+digest and read its shipped manifest/helper, rather than taking the app list
+from workflow HEAD. In a separate native build stage, populate the standard
+Homebrew prefix as a non-root owner and fully deploy Flatpaks with dependencies
+and extra-data processing. Only the resulting stores and provisioning metadata
+are copied into the disk-only image's `/var`. Grant SYS_ADMIN for this manual
+stage's nested Flatpak sandbox, following Aurora's ISO builder. Build dependencies
+and temporary user accounts stay in the disposable stage.
+
+Initial installation imports image `/var`; subsequent OS upgrades preserve it,
+per the [bootc filesystem contract](https://bootc.dev/bootc/bootc-filesystem.7.html#var).
+Both disk formats use the locally prepared image under the original channel
+name, and future updates follow that published channel. Never publish the
+prepared derivative. Record its local image ID and actual app versions separately
+from the original OS digest. App versions resolve at disk-build time; the two
+format jobs resolve independently. Full OCI/bootc/Anaconda import validation
+remains required before claiming successful offline installs.
+
+Use `gping` for the initial `qping`, canonical `git-delta` for `delta`, one `eza`,
+and include later requests `libbladerf` and `librtlsdr`. Preserve the user's RPM
+removals and fish addition. Include ZAP only on AMD64, explicitly approved after
+Flathub's ARM64 lookup found no ref. Set the QCOW2 root minimum to 64 GiB, also
+in the local legacy config; boot partitions are additional. Legacy local disk
+recipes are not migrated or augmented by this change.
+
+One restricted Brewfile supplies disk builds and explicit
+`ujust install-controlthings-tools`. Run Homebrew as its owner without upgrading
+listed installed formulae, then authorize the fixed system Flatpak list via
+pkexec. Existing machines receive new listed apps only through that explicit
+command; container updates do not rerun provisioning. Do not modify shell
+configuration merely because shell tools are installed.
+The manual command remains ControlThings-only; the Aurora default merge is a
+disk provisioning policy, not an expansion of the explicit command's scope.
+
+The user approved deleting the old Gqrx preinstall declaration because that
+build is unpublished and reinstalling on the development system is acceptable.
+A previously tracked Gqrx may be removed once by preinstall reconciliation;
+reinstall explicitly afterward.
+
+Usage: [README.md](../README.md#bundled-homebrew-and-flatpak-tools).
+Evidence and gaps: [STATUS.md](STATUS.md#bundled-homebrew-and-flatpak-tools--2026-10-15).
+
 ## CyberChef offline build — 2026-10-15
 
 Accepted user choice: download the latest stable official CyberChef offline ZIP
@@ -78,8 +153,9 @@ for AMD64 and ARM EFI packages for ARM64.
 
 Derive the filename date/hash from the container's version label, since the disk
 workflow HEAD/date describe a different build, and the OCI revision label may be
-inherited from Aurora. Pull the exact digest in each job and tag it locally with
-the channel reference. The new builder defaults to local storage; never enable
+inherited from Aurora. Pull the exact digest in each job and prepare the disk-only
+app stores as described above, tagging that derivative locally with the channel
+reference. The new builder defaults to local storage; never enable
 remote source resolution in these builds. QCOW2 uses that local name as its bootc
 target reference. Anaconda explicitly installs the embedded local payload while
 setting the channel as its target reference. Record the actual source digest
@@ -92,7 +168,7 @@ output naming and generic installer configuration controls needed here. Follow
 upstream's [migration guide](https://github.com/osbuild/image-builder/blob/cad701ad3175da7297b20f61775fc269e58d2cfc/doc/20-advanced/20-bootc/50-migration.md)
 and recommended `bootc-generic-iso` path. A separate Fedora 44 Anaconda environment
 based on the [upstream example](https://osbuild.org/docs/developer-guide/projects/image-builder/advanced/bootc/isos/)
-embeds the untouched OS payload. The existing local Justfile builder migration
+embeds the disk-only payload with its populated `/var`. The existing local Justfile builder migration
 is separate unfinished work, not part of this workflow change.
 
 Always upload separate GitHub artifacts, including checksums, source metadata,

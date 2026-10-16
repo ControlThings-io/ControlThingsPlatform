@@ -62,6 +62,7 @@ with tempfile.TemporaryDirectory(prefix='ct-pr3-tests-') as temp:
         args = json.loads(capture.read_text())
         assert args[0] == 'build' and args[args.index('--tag') + 1] == f'controlthingsplatform:{actual}', args
         assert any(re.fullmatch(r'CYBERCHEF_BUILD_EPOCH=\d+', arg) for arg in args), args
+        assert not any(arg.startswith('TOOLS_BUILD_EPOCH=') for arg in args), args
         print(f'PASS {event} {ref} -> {actual}; alias tags, mocked Podman build arguments, build/rechunk shell syntax')
     for ref in ('3/merge', '8/merge', '9/merge'):
         assert not tag_pattern.fullmatch(ref)

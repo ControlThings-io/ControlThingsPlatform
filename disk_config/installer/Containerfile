@@ -1,6 +1,7 @@
 # Generic ISO environment based on the upstream Fedora Anaconda example:
 # https://osbuild.org/docs/developer-guide/projects/image-builder/advanced/bootc/isos/
-# This environment is separate from the unchanged ControlThings OS payload.
+# This environment is separate from the disk-only ControlThings payload, whose
+# /var already contains the prepared tools. It does not publish a channel image.
 FROM quay.io/fedora/fedora-bootc:44@sha256:2cdd9f75bdcfb2c0cbbd3c86942d3c1aef8ec0bd842e3fcdf884995887681f2e
 
 ARG PAYLOAD_REF

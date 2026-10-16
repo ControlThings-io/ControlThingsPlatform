@@ -25,6 +25,7 @@ disk = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(disk)
 digest = "sha256:" + "a" * 64
 amd_digest = "sha256:" + "b" * 64
+payload_id = "sha256:" + "d" * 64
 image = "ghcr.io/controlthings-io/controlthingsplatform"
 builder = "ghcr.io/osbuild/image-builder@sha256:" + "c" * 64
 info = {
@@ -110,8 +111,15 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                 def command(*args, capture=False):
                     commands.append(args)
                     if args[:4] == ("sudo", "podman", "image", "inspect"):
-                        return digest
-                    if args[:3] == ("sudo", "podman", "run"):
+                        return payload_id if "{{.Id}}" in args else digest
+                    if "--entrypoint" in args:
+                        return json.dumps({"architecture": disk.ARCHITECTURES[architecture],
+                                           "homebrew_versions": ["fixture 1.0"],
+                                           "manifests_sha256": {"controlthings.Brewfile": "e" * 64,
+                                                                "system-flatpaks.Brewfile": "f" * 64},
+                                           "flatpak": ["org.mozilla.firefox", "dk.gqrx.gqrx"],
+                                           "flatpak_commits": {"fixture": "f" * 64}})
+                    if "--output-name" in args:
                         basename = args[args.index("--output-name") + 1]
                         (output / f"{basename}.{kind}").write_bytes(b"fixture disk contents")
                     return ""
@@ -128,10 +136,20 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                 )
                 saved = json.loads((output / f"{name}.source.json").read_text())
                 assert saved["source_digest"] == digest
+                assert saved["disk_payload_image_id"] == payload_id
+                assert saved["tools"]["homebrew_versions"] == ["fixture 1.0"]
+                assert "org.mozilla.firefox" in saved["tools"]["flatpak"]
+                assert "system-flatpaks.Brewfile" in saved["tools"]["manifests_sha256"]
                 assert saved["update_ref"] == f"{image}:{channel}"
                 assert commands[0] == ("sudo", "podman", "pull", "--arch", architecture, f"{image}@{digest}")
                 assert commands[1] == ("sudo", "podman", "tag", f"{image}@{digest}", f"{image}:{channel}")
-                invocation = next(cmd for cmd in commands if cmd[:3] == ("sudo", "podman", "run"))
+                payload_build = next(cmd for cmd in commands if "disk_config/tools/Containerfile" in cmd)
+                assert f"BASE_IMAGE={image}@{digest}" in payload_build
+                assert payload_build[payload_build.index("--arch") + 1] == architecture
+                assert "--pull=never" in payload_build and "--no-cache" in payload_build
+                assert payload_build[payload_build.index("--tag") + 1] == f"{image}:{channel}"
+                assert "--cap-add" in payload_build and "SYS_ADMIN" in payload_build
+                invocation = next(cmd for cmd in commands if "--output-name" in cmd)
                 assert "--bootc-pull-container" not in invocation
                 assert invocation[invocation.index("build") + 1] == (
                     "bootc-generic-iso" if kind == "iso" else "qcow2"
@@ -139,17 +157,17 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                 assert invocation[invocation.index("--arch") + 1] == ("x86_64" if architecture == "amd64" else "aarch64")
                 assert saved["architecture"] == architecture
                 if kind == "iso":
-                    installer_build = next(cmd for cmd in commands if cmd[:3] == ("sudo", "podman", "build"))
+                    installer_build = next(cmd for cmd in commands if "disk_config/installer/Containerfile" in cmd)
                     assert installer_build[installer_build.index("--arch") + 1] == architecture
                     assert f"TARGET_ARCH={architecture}" in installer_build
                     assert invocation[invocation.index("--bootc-installer-payload-ref") + 1] == f"{image}:{channel}"
                 else:
                     assert invocation[invocation.index("--bootc-ref") + 1] == f"{image}:{channel}"
-                    assert invocation[invocation.index("--image-size") + 1] == "20 GiB"
+                    assert invocation[invocation.index("--image-size") + 1] == "64 GiB"
 
-    # A pull/tag/inspection/builder failure must abort before checksums appear.
+    # Every external build stage must abort before checksums appear on failure.
     metadata = resolve("latest")
-    for fail_at in range(5):
+    for fail_at in range(9):
         output = Path(temporary) / f"failure-{fail_at}"
         calls = []
 
@@ -157,6 +175,8 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
             calls.append(args)
             if len(calls) - 1 == fail_at:
                 raise subprocess.CalledProcessError(1, args)
+            if "--entrypoint" in args:
+                return json.dumps({"architecture": "x86_64"})
             return digest if capture else ""
 
         try:
@@ -167,10 +187,20 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
         else:
             raise AssertionError("Command failure was ignored")
         assert not list(output.glob("*.sha256"))
-    for mode in ("wrong-digest", "missing-output"):
+    for mode in ("wrong-digest", "invalid-payload-id", "wrong-tool-arch", "missing-output"):
         output = Path(temporary) / mode
+
+        def invalid_build(*args, capture=False):
+            if "{{.Digest}}" in args:
+                return "wrong" if mode == "wrong-digest" else digest
+            if "{{.Id}}" in args:
+                return "wrong" if mode == "invalid-payload-id" else payload_id
+            if "--entrypoint" in args:
+                return json.dumps({"architecture": "aarch64" if mode == "wrong-tool-arch" else "x86_64"})
+            return ""
+
         try:
-            with patch.object(disk, "run", return_value="wrong" if mode == "wrong-digest" else digest):
+            with patch.object(disk, "run", side_effect=invalid_build):
                 disk.build(metadata, "qcow2", output)
         except ValueError:
             pass
@@ -198,6 +228,12 @@ for job in workflow["jobs"].values():
 installer = Path("disk_config/installer/Containerfile").read_text()
 assert "containers-storage:%s --target-imgref %s" in installer
 assert "org.fedoraproject.Anaconda.Modules.Subscription" not in installer
+tools_container = Path("disk_config/tools/Containerfile").read_text()
+assert 'FROM ${BASE_IMAGE}' in tools_container
+assert 'COPY --chown=1000:1000 --from=tools-builder /var/home/linuxbrew /var/home/linuxbrew' in tools_container
+assert 'COPY --from=tools-builder /var/lib/flatpak /var/lib/flatpak' in tools_container
+assert 'controlthings.Brewfile' not in '\n'.join(
+    line for line in tools_container.splitlines() if line.startswith('COPY'))
 # Execute the actual installer package-selection RUN block with a mocked DNF.
 package_step = installer.split("RUN case ", 1)[1].split("\n\n", 1)[0]
 package_step = "case " + package_step
@@ -218,4 +254,4 @@ with tempfile.TemporaryDirectory(prefix="ct-installer-packages-") as temporary:
         assert ("grub2-efi-x64-cdboot" in packages) == (architecture == "amd64")
         assert ("grub2-efi-aa64-cdboot" in packages) == (architecture == "arm64")
 print("PASS disk tag selection, immutable metadata, AMD64/ARM64 manifest selection, both formats/channels,")
-print("     checksums/metadata, failures, native runners, installer packages, pins, workflow shell syntax")
+print("     disk-only stores/identity, checksums/metadata, failures, native runners, installer packages and workflow syntax")

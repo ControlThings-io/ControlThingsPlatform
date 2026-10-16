@@ -1,5 +1,82 @@
 # Current status
 
+## Bundled Homebrew and Flatpak tools — 2026-10-15
+
+- Corrected the build boundary to the user's clarified design. Normal container
+  builds carry only the shared manifest/manual helper and recipe; the tools stage,
+  archives, changing cache argument, seed service and Homebrew ordering override
+  have been removed. Aurora's inherited bootstrap remains unchanged.
+- Added Aurora's default `system-flatpaks.Brewfile` to both disk formats, read
+  from the selected OS and merged with ControlThings' IDs. Firefox and Bazaar
+  are included; duplicate IDs install once. Optional CLI, DX Flatpak, fonts,
+  and other upstream ujust bundles are excluded. Source review found no separate
+  default Homebrew formula bundle: retain the bootstrap and add our 30 formulae.
+- The manual disk script prepares a disposable native image from the resolved OS
+  digest. Its manifest/helper supply the selected apps. A separate build stage
+  installs Brew formulae without root and fully deploys Flatpaks, including
+  extra-data processing, with nested-sandbox permissions. The disk-only image
+  receives populated `/var/home/linuxbrew` (UID/GID 1000), `/var/lib/flatpak`, and
+  provisioning metadata, without build dependencies/accounts or app archives.
+- ISO and QCOW2 both consume that local image under the original channel name,
+  preserving channel updates to the normal published OS. Source metadata records
+  the original digest, temporary payload image ID, both manifest checksums,
+  selected package IDs, omitted ARM64 defaults, Homebrew versions and Flatpak
+  commits. App versions resolve during each disk job.
+  Existing installs receive newly listed tools through `ujust
+  install-controlthings-tools`; no automatic ControlThings boot provisioning
+  remains. Old source tags without the manifest/helper cannot use this disk path.
+- Shared list: 30 unique formulae, including `libbladerf`, `librtlsdr`, `gping`
+  and `git-delta`; Gqrx, Obsidian, ImHex, Okteta, and AMD64-only ZAP. ARM64 omits
+  ZAP with user approval. The user's RPM removals and fish addition are retained.
+  The old Gqrx preinstall file is removed as approved for the unpublished build;
+  its previously tracked Gqrx may need explicit reinstallation after reconciliation.
+- Live catalog verification passed with the reviewed default list: 30 Brew
+  formulae and 27 Flatpak entries on AMD64; 30 formulae and 25 entries on ARM64.
+  ZAP is excluded by the custom manifest's architecture annotation; Thunderbird
+  is currently absent from Flathub on ARM64. The builder omits unavailable Aurora
+  defaults only on ARM64, records warnings/metadata, and fails on missing custom
+  tools, missing AMD64 defaults, or a failed catalog lookup.
+- Investigation of previously published `latest-20261015-9cd857d` and
+  `latest-20261015-895b82a` found neither disk path installed Aurora's curated
+  list. The user confirmed Bazaar and Gqrx did install in the background through
+  preinstall after first boot; their initial absence was timing, not a broken
+  preinstall service. The new disk path prepares them before installation.
+- QCOW2 retains the approved 64 GiB root minimum in both workflow and legacy
+  local config. Legacy local Justfile disk recipes still do not populate apps;
+  use the manual workflow or disk script for bundled images.
+- Checks passed: disk orchestration across both formats/architectures/channels,
+  with nine external failure stages and invalid source/payload identities,
+  mismatched tool architecture, missing output, checksums and metadata; manifest,
+  native default/custom selection, duplicate handling, optional-bundle exclusion,
+  ARM64 omissions, catalog failure, both manifest hashes, CLI JSON output,
+  explicit installer ownership/authorization/failure
+  boundaries and absence of normal-container payloads; workflow tagging;
+  CyberChef regression; Bash/Just syntax; whitespace review.
+- Packaging smoke checks passed: the real disk-build shell extracted the inherited
+  bootstrap and produced populated fixture stores/version metadata in Bubblewrap,
+  with package/account/mount commands mocked. A real synthetic Flatpak installation
+  retained its app, runtime, extra-data and desktop export after copying to a new
+  temporary installation and removing its sources/cache. Both tests ran outside
+  the session sandbox for namespace/loopback access; host installs were untouched.
+- A real rootless Podman build using the final disk COPY instructions and scratch
+  fixtures passed: OCI layers preserved UID/GID 1000 for the Homebrew home/prefix,
+  preserved Flatpak hardlinks, and included provisioning metadata without app
+  archives. Used private temporary VFS storage with no network; cleanup passed.
+- Earlier live catalogs verified the requested formula names, Linux bottles for
+  `libbladerf`, `librtlsdr`, and `gping`, and Flathub availability on both arches
+  except ZAP on ARM64. Lynis/sqlmap are script formulae without Linux bottles.
+- Remaining: publish the new normal container, then full manual disk CI, actual
+  formula/dependency installation, Obsidian apply_extra in Podman's nested sandbox,
+  full-payload OCI/SELinux handling, and bootc import of the prepared
+  `/var` stores. Install ISO and boot QCOW2 with networking disconnected, verify
+  tools and channel references, then update to the normal OS and confirm stores
+  remain usable. Check KDE pkexec, Brew owner/PATH, hardware capture, free disk
+  space, and explicit installation of later additions. No full container/disk
+  build, VM boot, real extra-data script, remote CI or hardware test is established
+  by these local tests. The real Flatpak test uses a user store and no apply_extra.
+- Usage: [README.md](../README.md#bundled-homebrew-and-flatpak-tools).
+  Rationale: [DECISIONS.md](DECISIONS.md#bundled-homebrew-and-flatpak-tools--2026-10-15).
+
 ## CyberChef offline build — 2026-10-15
 
 - Added `build_files/install-cyberchef.py` to resolve the latest stable official
@@ -80,14 +157,15 @@
 - CI now invokes the pinned new image-builder CLI directly. The generic ISO
   uses a separate pinned Fedora 44 Anaconda environment in
   `disk_config/installer/`, adapted from upstream's example, and embeds the
-  selected payload for local installation. QCOW2 retains Btrfs and a 20 GiB root
+  selected payload for local installation. QCOW2 retains Btrfs and a 64 GiB root
   minimum. Existing local Justfile recipes/configs still use the legacy builder.
   Added a Renovate matcher for the workflow builder pin. Installer packages
   select x86 BIOS/EFI or ARM EFI components according to the requested platform.
 - Checks passed: `python3 tests/check_build_disk.py` (channel and dated tags,
   invalid tags/labels/dates/architectures, multiarchitecture selection, both
   formats, both architectures, and three channels, filenames/checksums/metadata,
-  five command failure stages, digest mismatch and missing output, manual
+  nine command failure stages, source/payload identity and tool-architecture
+  mismatch, missing output, manual
   architecture selector/native runners, action pins, installer package selection
   using mocked DNF, workflow shell syntax); Python AST and Containerfile shell syntax; ISO label
   consistency; Renovate JSON parsing and dependency regex extraction;
@@ -248,7 +326,8 @@ This report does not establish ISO or offline-installation success.
 - Offline classroom validation: repeat installation and first login with the
   VM network adapter disconnected, then run the required training tools.
 - Classroom account provisioning, managed home content, and bundled offline
-  Python/Homebrew dependencies remain proposals, not implemented features.
+  Python dependencies remain proposals. Homebrew/Flatpak bundling is implemented
+  above, pending full image and VM validation.
 
 ## Default lock-screen background — 2026-10-14
 

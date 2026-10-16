@@ -6,9 +6,11 @@ Usage: build-disk.py resolve IMAGE TAG BUILDER OUTPUT_JSON [--arch {amd64,arm64}
 
 Requires Skopeo for resolution and sudo/Podman for builds. Resolution inspects
 immutable metadata after selecting a digest; both matrix jobs consume that JSON.
-Builds pull only that digest, then give it the channel name in local storage.
-image-builder uses local storage by default, so payload bytes stay fixed while
-the installed bootc reference follows the channel. Errors abort without upload.
+Builds pull only that digest, populate a disposable disk-only image's /var with
+Homebrew and Flatpaks, then give it the channel name in local storage. The OS and
+tool manifest come from the selected digest; app versions resolve at disk-build
+time. image-builder uses local storage, and future updates follow the original
+published OS channel. Errors abort without upload.
 """
 
 import argparse
@@ -100,7 +102,10 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
 
     Output must be absent or empty. ISO embeds a local payload and sets its
     update reference explicitly in Anaconda; QCOW2 inherits its local tag as
-    target-imgref. No remote-source option or channel pull is allowed here.
+    target-imgref. Prepare app stores in a disk-only derivative of the verified
+    source; never publish it. Record its image ID and app versions separately
+    from the original source digest. No remote-source option or channel pull is
+    allowed here. Missing manifest/helper in an older source fails the build.
     """
     architecture = metadata["architecture"]
     if architecture not in ARCHITECTURES:
@@ -116,6 +121,21 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
                        "{{.Digest}}", channel, capture=True)
     if local_digest != metadata["source_digest"]:
         raise ValueError("Local channel does not match the resolved payload digest")
+    # Only the manual disk workflow invokes this nested-sandbox-capable stage.
+    # Retag locally with the original channel so installed updates keep following
+    # the published, lean OS image rather than the disposable derivative.
+    run("sudo", "podman", "build", "--arch", architecture, "--pull=never", "--no-cache",
+        "--cap-add", "SYS_ADMIN", "--security-opt", "label=disable",
+        "--build-arg", f"BASE_IMAGE={source}", "--tag", channel,
+        "--file", "disk_config/tools/Containerfile", "disk_config/tools")
+    payload_id = run("sudo", "podman", "image", "inspect", "--format",
+                     "{{.Id}}", channel, capture=True)
+    if not re.fullmatch(r"sha256:[a-f0-9]{64}", payload_id):
+        raise ValueError("Disk payload has an invalid local image ID")
+    tools = json.loads(run("sudo", "podman", "run", "--rm", "--entrypoint", "cat", channel,
+                          "/var/lib/controlthings/tools/installed.json", capture=True))
+    if tools["architecture"] != ARCHITECTURES[architecture]:
+        raise ValueError("Disk tool payload has the wrong architecture")
     image_type, bootc_ref = "qcow2", channel
     name = f'{metadata["image"].rsplit("/", 1)[-1]}-{metadata["source_tag"]}-{architecture}'
     extra = []
@@ -129,7 +149,7 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
         extra = ["--bootc-installer-payload-ref", channel]
     else:
         # For bootc disks --image-size sets a root minimum before boot partitions.
-        extra = ["--image-size", "20 GiB"]
+        extra = ["--image-size", "64 GiB"]
     run("sudo", "podman", "run", "--rm", "--privileged",
         "--security-opt", "label=type:unconfined_t",
         "-v", f"{output}:/output",
@@ -151,7 +171,8 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
         f"{checksum.hexdigest()}  {artifact.name}\n"
     )
     (output / f"{name}.source.json").write_text(
-        json.dumps({**metadata, "format": kind, "filename": artifact.name}, indent=2) + "\n"
+        json.dumps({**metadata, "format": kind, "filename": artifact.name,
+                    "disk_payload_image_id": payload_id, "tools": tools}, indent=2) + "\n"
     )
 
 

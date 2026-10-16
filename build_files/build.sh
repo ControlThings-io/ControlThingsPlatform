@@ -14,9 +14,7 @@ cp -avf "/ctx/system_files"/. /
 
 # this installs a package from fedora repos
 PACKAGES=(
-    binwalk
-    lynis
-    netcat
+    fish
     python3
     wireshark
     xdg-utils
@@ -49,6 +47,7 @@ done
 systemctl enable podman.socket
 chmod 0755 /usr/libexec/controlthings-groups
 systemctl enable controlthings-groups.service
+chmod 0755 /usr/libexec/controlthings-tools
 
 # Remove inherited counting cookies after package operations, before rechunking.
 # Tiny changes here otherwise invalidate the large unpackaged-content layer.

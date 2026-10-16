@@ -88,7 +88,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y podman
-      - name: Build image and checksum
+      - name: Populate disk-only app stores, build image, and checksum
         env:
           DISK_FORMAT: ${{ matrix.format }}
         run: python3 scripts/build-disk.py build disk-input/source.json "$DISK_FORMAT" output

@@ -227,6 +227,75 @@ Verify the icon and the browser used. See
 [STATUS.md](docs/STATUS.md#cyberchef-offline-build--2026-10-15) for validation gaps
 and [DECISIONS.md](docs/DECISIONS.md#cyberchef-offline-build--2026-10-15) for rationale.
 
+## Bundled Homebrew and Flatpak tools
+
+The [ControlThings Brewfile](system_files/usr/share/ublue-os/homebrew/controlthings.Brewfile)
+defines the apps prepared **only during manual disk-image builds**. Normal
+container builds ship the list and manual installer; they do not download or
+bundle these applications. Aurora's inherited Homebrew bootstrap stays unchanged.
+
+Both disk formats also install Aurora's default
+`/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile` from the selected container,
+including Firefox and Bazaar. Duplicate IDs across that list and ControlThings'
+list are installed once. Aurora's optional CLI, fonts, DX Flatpak, and other
+`ujust` bundles are excluded. Aurora's bootstrap does not automatically install
+its optional CLI collection; only ControlThings' requested formulae are added.
+
+The list includes 30 Homebrew formulae, including `eza`, `gping`, `git-delta`
+(the `delta` command), `libbladerf`, and `librtlsdr`, plus Gqrx, Obsidian, ImHex,
+Okteta, and ZAP. ZAP is AMD64-only because Flathub has no ARM64 build; ARM64 gets
+the other four apps. Use simple `brew "name"` and `flatpak "application.ID"`
+declarations. The optional `# arch=x86_64` Flatpak annotation restricts an app
+to AMD64.
+
+With the reviewed Aurora default list, the combined selection has 27 Flatpak
+entries on AMD64 and 25 on ARM64. The build checks the native Flathub catalog:
+unavailable Aurora defaults on ARM64 are omitted with a warning and recorded in
+metadata (currently Thunderbird). Missing ControlThings entries or catalog
+errors fail the build. The ZAP architecture annotation applies separately.
+
+The manual disk workflow starts from the selected published container digest
+and its shipped manifest. A temporary local image prepares Homebrew under
+`/var/home/linuxbrew/.linuxbrew` and system Flatpaks under `/var/lib/flatpak`,
+including dependencies and extra-data processing. Both ISO and QCOW2 install
+these populated stores; their apps need no first-boot download or custom seed
+service. Builds require internet access and extra working space. The temporary
+image is not published, and installed systems follow the original OS channel.
+
+Publish a container containing the manifest/helper before using this disk path;
+older container tags without them fail with an explanatory error. The legacy
+local `just build-iso`/`just build-qcow2` recipes do not populate these tools;
+use the manual GitHub disk workflow or `scripts/build-disk.py` for bundled images.
+
+Normal container updates preserve installed Homebrew and Flatpak stores and do
+not add newly listed apps. To add the current image's tools to an existing
+system, run as the Homebrew owner (normally the first login account):
+
+```bash
+ujust install-controlthings-tools
+```
+
+This installs missing Homebrew formulae without upgrading existing ones, then
+asks for administrator authorization to install missing system Flatpaks. It can
+download missing packages and does not remove other tools. Continue using
+Homebrew, Flatpak, or Aurora's update tooling for application updates. Installing
+Starship and Zoxide does not automatically change shell configuration.
+
+Disk artifact source metadata records the original OS digest, the temporary
+payload's local image ID, both manifest checksums, selected package IDs, omitted
+ARM64 defaults, Homebrew versions and Flatpak commits. The same initial metadata is installed at
+`/var/lib/controlthings/tools/installed.json`; it describes disk provisioning,
+not later application updates. QCOW2 uses a 64 GiB root minimum for the populated
+stores; measure remaining space after first boot.
+
+The manual `ujust install-controlthings-tools` command installs ControlThings'
+list only; it does not automatically install Aurora's default or optional bundles.
+
+Gqrx's former preinstall declaration was removed with the user's approval.
+The unpublished development image that previously tracked it may remove it once
+during preinstall reconciliation; reinstall with the command above afterward.
+See [current validation](docs/STATUS.md) and [accepted decisions](docs/DECISIONS.md).
+
 ## Containerfile
 
 The [Containerfile](./Containerfile) defines the operations used to customize the selected image.This file is the entrypoint for your image build, and works exactly like a regular podman Containerfile. For reference, please see the [Podman Documentation](https://docs.podman.io/en/latest/Introduction.html).
@@ -289,15 +358,17 @@ using that platform; the resolver fails early when it is missing.
 
 Each download includes a `.sha256` file, `.source.json` metadata, and an osbuild
 manifest. Verify a downloaded image with `sha256sum -c FILENAME.sha256`.
-Metadata records the payload digest, requested tag, update reference, builder,
-and workflow run. Same-day container rebuilds can reuse date/hash tags; the
-recorded digest distinguishes their contents. Artifact names also contain the
+Metadata records the original OS digest, disk-only payload image ID, tool versions,
+requested tag, update reference, builder, and workflow run. Same-day container
+rebuilds can reuse date/hash tags; the recorded identities distinguish their
+contents. Artifact names also contain the
 workflow run and attempt so the two formats and repeated runs remain separate.
 
 Installed systems follow their source channel: `latest` updates to `latest`,
 `ics410_l01` updates to `ics410_l01`, and `ics410-l01` updates to `ics410-l01`.
-Selecting a dated tag fixes the installation payload but still follows that
-tag's channel for future updates. The ISO embeds the selected payload and
+Selecting a dated tag fixes the OS source and tool list; app versions resolve at
+disk-build time. The installed system follows that tag's channel for future
+updates. The ISO embeds the prepared disk-only payload and
 Anaconda installs from local container storage. Offline installation and first
 login still require VM validation.
 
@@ -312,7 +383,9 @@ on the [upstream generic ISO example](https://osbuild.org/docs/developer-guide/p
 Its kickstart explicitly selects the embedded payload and channel update
 reference. The installer environment does not become the installed OS.
 
-QCOW2 uses the new CLI's `--image-size "20 GiB"` root minimum and Btrfs default.
+QCOW2 uses the new CLI's `--image-size "64 GiB"` root minimum and Btrfs default,
+allowing space for the preinstalled Homebrew and Flatpak stores. The local legacy
+disk configuration also uses a 64 GiB root minimum.
 The existing `just build-iso`/`just build-qcow2` recipes and
 `disk_config/iso.toml`/`disk_config/disk.toml` still use the legacy local builder;
 this migration covers the GitHub disk workflow only.
