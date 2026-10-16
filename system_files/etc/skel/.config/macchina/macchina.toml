@@ -1,0 +1,94 @@
+# ~/.config/macchina/macchina.toml
+
+# ---------------------------------------------------------------------------
+# Theme
+# ---------------------------------------------------------------------------
+
+theme = "ControlThings"
+
+
+# ---------------------------------------------------------------------------
+# Network
+# ---------------------------------------------------------------------------
+
+# Interface used for the LocalIp readout.
+interface = "wlp0s20f3"
+
+
+# ---------------------------------------------------------------------------
+# Readout formatting
+# ---------------------------------------------------------------------------
+
+# Equivalent to -U / --long-uptime
+long_uptime = true
+
+# Equivalent to -S / --long-shell
+long_shell = false
+
+# Equivalent to -K / --long-kernel
+long_kernel = false
+
+# Equivalent to -s / --current-shell
+# true  = shell currently running
+# false = user's configured/default shell
+current_shell = true
+
+# Equivalent to -C / --physical-cores
+# true  = physical cores
+# false = logical cores
+physical_cores = false
+
+# Equivalent to -m / --memory-percentage
+memory_percentage = false
+
+# Equivalent to -p / --disk-space-percentage
+disk_space_percentage = false
+
+
+# ---------------------------------------------------------------------------
+# Disk usage
+# ---------------------------------------------------------------------------
+
+# Equivalent to: -D /home
+#
+# Multiple filesystems are supported, e.g.:
+# disks = ["/", "/home"]
+disks = ["/home"]
+
+
+# ---------------------------------------------------------------------------
+# Readouts and display order
+# ---------------------------------------------------------------------------
+
+show = [
+    # Identity
+    "Host",
+    "LocalIP",
+
+    # Hardware
+    "Machine",
+    "Processor",
+    "GPU",
+
+    # Operating system
+    "Distribution",
+    "Kernel",
+
+    # Desktop / user environment
+    "DesktopEnvironment",
+    "WindowManager",
+    "Resolution",
+    "Terminal",
+    "Shell",
+    "Packages",
+
+    # Runtime status
+    "Uptime",
+
+    # Graphs
+    "Backlight",
+    "ProcessorLoad",
+    "Memory",
+    "DiskSpace",
+    "Battery",
+]
