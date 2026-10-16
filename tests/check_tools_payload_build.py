@@ -106,6 +106,7 @@ esac
         '--symlink', 'usr/lib', '/lib', '--symlink', 'usr/lib64', '/lib64',
         '--proc', '/proc', '--dev', '/dev', '--bind', str(work / 'var'), '/var',
         '--symlink', 'var/home', '/home',
+        '--symlink', 'var/roothome', '/root',
         '--bind', str(work / 'flatpak'), '/var/lib/flatpak',
         '--bind', str(work / 'out'), '/out',
         '--bind', str(work / 'tmp'), '/tmp',
@@ -120,7 +121,9 @@ esac
     # Match the build container: /home is dangling until the script creates
     # /var/home. Pre-binding /var/home would hide the first disk CI failure.
     assert not (work / 'var/home').exists()
+    assert not (work / 'var/roothome').exists()
     subprocess.run(command, check=True)
+    assert (work / 'var/roothome/.cache/dconf').is_dir()
     assert (work / 'var/home/linuxbrew/.linuxbrew/Cellar/fixture/1.0/installed').read_text() == 'fixture\n'
     assert (work / 'flatpak/app/org.controlthings.Fixture/fixture').read_text() == 'installed-app\n'
     assert (work / 'out/homebrew-versions.txt').read_text() == 'fixture 1.0\n'

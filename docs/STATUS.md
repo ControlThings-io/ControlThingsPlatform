@@ -1,5 +1,36 @@
 # Current status
 
+## Disk assembly space recovery — 2026-10-16
+
+- [Run 38861667838](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/38861667838)
+  at `391e48a` passed app provisioning, nested sandbox setup and payload identity
+  validation, then failed during disk assembly. ISO reported 0 MB runner space
+  and `no space left on device` while copying the Obsidian deployment. QCOW2
+  reported read-only Btrfs, sync I/O errors and loopback cleanup failures during
+  bootc import; backing-storage exhaustion is suspected but not independently
+  established for that job. Both runners started with about 118 GiB free after
+  cleanup; the prior successful small disks did not contain these app stores.
+- Label the disposable tools-builder stage with a unique per-invocation ID.
+  Once the completed payload and architecture are verified, prune only dangling
+  images matching that ID before installer/disk assembly. This releases the
+  builder's duplicate populated stores without globally pruning local storage.
+  Retain the tagged payload, its base layers and unrelated images. Print disk
+  space before/after cleanup and Podman storage usage for the next CI diagnosis.
+- Create `/var/roothome/.cache/dconf` in the disposable stage to resolve the
+  reported root-cache warnings. Root's cache is not copied to the disk payload.
+- Checks passed: disk orchestration for both formats/architectures/channels,
+  cleanup ordering/label identity, all external failure boundaries; isolated
+  payload shell with initially absent `/home` and `/root` targets; manifest/manual
+  installer regressions; real isolated Podman stage cleanup and OCI inspection.
+  The Podman test proved all marked builder images were removed, an unrelated
+  dangling image survived, and the final payload retained Brew ownership and
+  Flatpak hardlinks. It used private temporary VFS storage, no network and
+  successful cleanup outside the session sandbox. Whitespace review passed.
+- Authorized for this fix only: commit/push, wait for the automatic container
+  workflow to succeed, then dispatch a fresh AMD64 disk build from that published
+  source. Full-size storage sufficiency, ISO/QCOW2 output and offline VM behavior
+  remain unverified until the new runs complete. uv work remains paused.
+
 ## Disk build ID and nested sandbox fixes — 2026-10-16
 
 - [Disk run 38855045570](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/38855045570)
@@ -25,8 +56,8 @@
   `python3 tests/check_disk_build_sandbox.py`. The real Podman sandbox test ran
   outside the session sandbox with private temporary VFS storage, host binary
   fixtures, no network and successful cleanup. Whitespace review passed.
-- Remaining: submit the fixes and run fresh ISO/QCOW2 jobs. Re-running the old
-  commit would repeat its ID failure. Complete image-builder, real Flatpak
+- Remote run `38861667838` passed the ID and sandbox fixes; assembly failures
+  and the next fix are recorded above. Complete image-builder, real Flatpak
   extra-data/exports and offline VM validation remain required; the local
   sandbox check establishes namespace setup, not the complete installation.
 - No uv ownership, provisioning, Brew migration or update changes were made;

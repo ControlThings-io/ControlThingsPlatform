@@ -142,6 +142,8 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
 
                 with patch.object(disk, "run", side_effect=command):
                     disk.build(metadata, kind, output)
+                if kind == "iso":
+                    iso_command_count = len(commands)
                 name = f"controlthingsplatform-{channel}-20261015-5118339-{architecture}"
                 if kind == "iso":
                     name += "-installer"
@@ -166,6 +168,15 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                 assert payload_build[payload_build.index("--tag") + 1] == f"{image}:{channel}"
                 assert "--cap-add" in payload_build and "SYS_ADMIN" in payload_build
                 assert "NET_ADMIN" in payload_build
+                build_id_arg = next(arg for arg in payload_build if arg.startswith("DISK_BUILD_ID="))
+                build_id = build_id_arg.split("=", 1)[1]
+                assert len(build_id) == 32 and all(c in "0123456789abcdef" for c in build_id)
+                cleanup = next(cmd for cmd in commands if "prune" in cmd)
+                assert cleanup == ("sudo", "podman", "image", "prune", "--force", "--filter",
+                                   f"label=io.controlthings.disk-build={build_id}")
+                assert commands.index(cleanup) > commands.index(payload_build)
+                assert commands.index(cleanup) < commands.index(next(
+                    cmd for cmd in commands if "--output-name" in cmd))
                 invocation = next(cmd for cmd in commands if "--output-name" in cmd)
                 assert "--bootc-pull-container" not in invocation
                 assert invocation[invocation.index("build") + 1] == (
@@ -184,7 +195,7 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
 
     # Every external build stage must abort before checksums appear on failure.
     metadata = resolve("latest")
-    for fail_at in range(9):
+    for fail_at in range(iso_command_count):
         output = Path(temporary) / f"failure-{fail_at}"
         calls = []
 
@@ -194,6 +205,9 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                 raise subprocess.CalledProcessError(1, args)
             if "--entrypoint" in args:
                 return json.dumps({"architecture": "x86_64"})
+            if "--output-name" in args:
+                basename = args[args.index("--output-name") + 1]
+                (output / f"{basename}.iso").write_bytes(b"fixture disk contents")
             return digest if capture else ""
 
         try:

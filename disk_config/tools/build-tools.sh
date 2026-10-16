@@ -10,7 +10,7 @@ bwrap --unshare-net --ro-bind / / /usr/bin/true
 
 # Aurora's /home symlink points to /var/home, which can be absent in a build
 # container. Create its target before using /home for Homebrew's bottle prefix.
-mkdir -p /out /var/home
+mkdir -p /out /var/home /var/roothome/.cache/dconf
 mkdir -p /home/linuxbrew
 # The inherited default Flatpak list is the same list Aurora's ISO uses. Optional
 # CLI, fonts, DX, and other ujust Brewfiles are not disk provisioning inputs.

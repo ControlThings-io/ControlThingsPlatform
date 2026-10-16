@@ -2,8 +2,9 @@
 
 Run with python3; requires working rootless Podman, subordinate UID/GID mappings,
 and tar support. Uses scratch fixture stages, private VFS storage and no network.
-Checks prefix ownership and Flatpak hardlinks in OCI output without fetching the
-Aurora base or executing package installers. Does not test bootc installation.
+Checks scoped intermediate-image cleanup, prefix ownership and Flatpak hardlinks
+in OCI output without fetching Aurora or running package installers. Does not
+test bootc installation or establish sufficient space for full disk builds.
 """
 
 import json
@@ -32,6 +33,7 @@ with tempfile.TemporaryDirectory(prefix='ct-disk-oci-') as temporary:
     final = actual.rsplit('FROM ${BASE_IMAGE}', 1)[1]
     (context / 'Containerfile').write_text(
         'FROM scratch AS tools-builder\n'
+        'LABEL io.controlthings.disk-build=fixture\n'
         'COPY linuxbrew /var/home/linuxbrew\n'
         'COPY flatpak /var/lib/flatpak\n'
         'COPY installed.json /out/installed.json\n'
@@ -45,6 +47,20 @@ with tempfile.TemporaryDirectory(prefix='ct-disk-oci-') as temporary:
         subprocess.run([*command, 'build', '--pull=never', '--network=none',
                         '--tag', 'localhost/controlthings-disk-fixture:check', str(context)],
                        env=env, check=True)
+        # An unrelated dangling image must survive the filtered cleanup too.
+        unrelated = context / 'Unrelated'
+        unrelated.write_text('FROM scratch\nLABEL io.controlthings.disk-build=other\n')
+        subprocess.run([*command, 'build', '--pull=never', '--network=none', '--file', str(unrelated),
+                        '--tag', 'localhost/controlthings-unrelated:check', str(context)], env=env, check=True)
+        unrelated_id = subprocess.check_output([*command, 'image', 'inspect', '--format', '{{.Id}}',
+                                               'localhost/controlthings-unrelated:check'], env=env, text=True).strip()
+        subprocess.run([*command, 'untag', 'localhost/controlthings-unrelated:check'], env=env, check=True)
+        selected = [*command, 'image', 'ls', '--quiet', '--filter', 'label=io.controlthings.disk-build=fixture']
+        assert subprocess.check_output(selected, env=env, text=True).strip()
+        subprocess.run([*command, 'image', 'prune', '--force', '--filter',
+                        'label=io.controlthings.disk-build=fixture'], env=env, check=True)
+        assert not subprocess.check_output(selected, env=env, text=True).strip()
+        subprocess.run([*command, 'image', 'inspect', '--format', '{{.Id}}', unrelated_id], env=env, check=True)
         output = work / 'oci'
         subprocess.run([*command, 'save', '--format', 'oci-dir', '--output', str(output),
                         'localhost/controlthings-disk-fixture:check'], env=env, check=True)
@@ -67,6 +83,7 @@ with tempfile.TemporaryDirectory(prefix='ct-disk-oci-') as temporary:
         files = ['var/lib/flatpak/repo/objects/fixture', 'var/lib/flatpak/app/fixture']
         assert any(members[path].islnk() for path in files), 'Flatpak hardlinks were duplicated'
         assert 'var/lib/controlthings/tools/installed.json' in members
+        assert not any(path.startswith('var/roothome') for path in members)
         assert not any(path.endswith('homebrew.tar.zst') or path.endswith('flatpaks.tar.zst')
                        for path in members)
     finally:

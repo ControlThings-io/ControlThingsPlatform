@@ -261,6 +261,9 @@ including dependencies and extra-data processing. Both ISO and QCOW2 install
 these populated stores; their apps need no first-boot download or custom seed
 service. Builds require internet access and extra working space. The temporary
 image is not published, and installed systems follow the original OS channel.
+Before disk assembly, the script removes only its own labelled, dangling
+tools-builder images to reclaim duplicate app stores. It reports storage usage
+around that cleanup; full builds still require substantial working space.
 
 Publish a container containing the manifest/helper before using this disk path;
 older container tags without them fail with an explanatory error. The legacy

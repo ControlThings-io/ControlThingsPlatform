@@ -47,6 +47,13 @@ because Flatpak may treat trigger failures as warnings. These capabilities apply
 only to disk preparation. Build dependencies and temporary user accounts stay in
 the disposable stage. See [validation](STATUS.md#disk-build-id-and-nested-sandbox-fixes--2026-10-16).
 
+Disk assembly space handling (2026-10-16): after payload verification, reclaim
+only this invocation's labelled, dangling tools-builder images before osbuild
+creates further copies. The populated stage is not needed after final COPY.
+Global Podman pruning is inappropriate for the script's local-build use; preserve
+unrelated storage and final-image ancestors. Real fixture cleanup is validated;
+full-size capacity still needs CI. See [current evidence](STATUS.md#disk-assembly-space-recovery--2026-10-16).
+
 Initial installation imports image `/var`; subsequent OS upgrades preserve it,
 per the [bootc filesystem contract](https://bootc.dev/bootc/bootc-filesystem.7.html#var).
 Both disk formats use the locally prepared image under the original channel

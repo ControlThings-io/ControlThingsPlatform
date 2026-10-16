@@ -21,6 +21,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import uuid
 
 ARCHITECTURES = {"amd64": "x86_64", "arm64": "aarch64"}
 
@@ -136,10 +137,12 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
     # Only the manual disk workflow invokes this nested-sandbox-capable stage.
     # Retag locally with the original channel so installed updates keep following
     # the published, lean OS image rather than the disposable derivative.
+    build_id = uuid.uuid4().hex
     run("sudo", "podman", "build", "--arch", architecture, "--pull=never", "--no-cache",
         "--cap-add", "SYS_ADMIN", "--cap-add", "NET_ADMIN",
         "--security-opt", "label=disable",
-        "--build-arg", f"BASE_IMAGE={source}", "--tag", channel,
+        "--build-arg", f"BASE_IMAGE={source}",
+        "--build-arg", f"DISK_BUILD_ID={build_id}", "--tag", channel,
         "--file", "disk_config/tools/Containerfile", "disk_config/tools")
     payload_id = canonical_image_id(run(
         "sudo", "podman", "image", "inspect", "--format",
@@ -148,6 +151,15 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
                           "/var/lib/controlthings/tools/installed.json", capture=True))
     if tools["architecture"] != ARCHITECTURES[architecture]:
         raise ValueError("Disk tool payload has the wrong architecture")
+    # COPY leaves the populated tools-builder image in local storage. Release
+    # its duplicate stores before osbuild imports another copy of the payload.
+    # This invocation's label exists only on that disposable stage; keep the
+    # tagged payload, its ancestors and every unrelated image untouched.
+    run("df", "-h", str(output), "/var/lib/containers/storage")
+    run("sudo", "podman", "image", "prune", "--force", "--filter",
+        f"label=io.controlthings.disk-build={build_id}")
+    run("sudo", "podman", "system", "df")
+    run("df", "-h", str(output), "/var/lib/containers/storage")
     image_type, bootc_ref = "qcow2", channel
     name = f'{metadata["image"].rsplit("/", 1)[-1]}-{metadata["source_tag"]}-{architecture}'
     extra = []
