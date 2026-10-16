@@ -39,8 +39,13 @@ from workflow HEAD. In a separate native build stage, populate the standard
 Homebrew prefix as a non-root owner and fully deploy Flatpaks with dependencies
 and extra-data processing. Only the resulting stores and provisioning metadata
 are copied into the disk-only image's `/var`. Grant SYS_ADMIN for this manual
-stage's nested Flatpak sandbox, following Aurora's ISO builder. Build dependencies
-and temporary user accounts stay in the disposable stage.
+stage's nested Flatpak mounts, following Aurora's ISO builder. The 2026-10-16
+failure investigation also established that NET_ADMIN is needed for Bubblewrap's
+private loopback setup: a real isolated Podman fixture reproduces the exact CI
+error without it and passes with it. Check sandbox setup before downloads,
+because Flatpak may treat trigger failures as warnings. These capabilities apply
+only to disk preparation. Build dependencies and temporary user accounts stay in
+the disposable stage. See [validation](STATUS.md#disk-build-id-and-nested-sandbox-fixes--2026-10-16).
 
 Initial installation imports image `/var`; subsequent OS upgrades preserve it,
 per the [bootc filesystem contract](https://bootc.dev/bootc/bootc-filesystem.7.html#var).

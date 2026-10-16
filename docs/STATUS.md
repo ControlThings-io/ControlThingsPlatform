@@ -1,5 +1,37 @@
 # Current status
 
+## Disk build ID and nested sandbox fixes — 2026-10-16
+
+- [Disk run 38855045570](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/38855045570)
+  at `a00e04a` failed in both AMD64 formats after successfully building the
+  populated app payload. The home-directory fix worked. The normal
+  [container run 38853326517](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/38853326517)
+  succeeded. Disk jobs stopped before invoking image-builder because Podman's
+  inspect returned bare 64-character image IDs and our check required `sha256:`.
+- Normalize bare and prefixed full IDs to canonical `sha256:` metadata, while
+  retaining rejection of abbreviated, malformed and other-algorithm IDs.
+  The orchestration regression reproduced the CI exception before the fix;
+  both format/architecture/channel paths now pass with both ID representations.
+- Both jobs also logged three `bwrap: loopback: Failed RTM_NEWADDR: No child
+  processes` warnings after Flatpak installation. A network-free scratch Podman
+  build reproduced this exact error with SYS_ADMIN alone and succeeded with
+  NET_ADMIN added. Grant both capabilities only to the manual disk preparation
+  build, and run the nested network sandbox check before app downloads. Flatpak
+  trigger warnings must not silently bypass this prerequisite. Bubblewrap is
+  now an explicit build-stage dependency.
+- Checks passed: `python3 tests/check_build_disk.py`,
+  `python3 tests/check_tools_payload_build.py` (including early sandbox failure
+  and catalog failure), `python3 tests/check_controlthings_tools.py`, and
+  `python3 tests/check_disk_build_sandbox.py`. The real Podman sandbox test ran
+  outside the session sandbox with private temporary VFS storage, host binary
+  fixtures, no network and successful cleanup. Whitespace review passed.
+- Remaining: submit the fixes and run fresh ISO/QCOW2 jobs. Re-running the old
+  commit would repeat its ID failure. Complete image-builder, real Flatpak
+  extra-data/exports and offline VM validation remain required; the local
+  sandbox check establishes namespace setup, not the complete installation.
+- No uv ownership, provisioning, Brew migration or update changes were made;
+  that proposal is paused at the user's request.
+
 ## Bundled Homebrew and Flatpak tools — 2026-10-15
 
 - First full disk CI attempt at `0a629cc` failed in both AMD64 formats:
@@ -10,7 +42,8 @@
   The isolated shell fixture now starts with `/var/home` absent; it reproduced
   the exact CI error before the fix and passed afterward. Disk orchestration,
   tool manifest/installer regressions and whitespace review also passed.
-  The corrected workflow has not run remotely yet.
+  The next remote attempt passed this step; its later failures and fixes are
+  recorded [above](#disk-build-id-and-nested-sandbox-fixes--2026-10-16).
 - Corrected the build boundary to the user's clarified design. Normal container
   builds carry only the shared manifest/manual helper and recipe; the tools stage,
   archives, changing cache argument, seed service and Homebrew ordering override

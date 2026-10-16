@@ -54,6 +54,11 @@ esac
                     'home/linuxbrew/.linuxbrew'], check=True)
     for name in ('useradd', 'chown', 'mount'):
         executable(work / 'tmp/bin' / name, f'echo "{name} $*" >> /tmp/commands\n')
+    executable(work / 'tmp/bin/bwrap', '''
+echo "bwrap $*" >> /tmp/commands
+test "$*" = '--unshare-net --ro-bind / / /usr/bin/true'
+test "${CT_TEST_FAIL_SANDBOX:-0}" = 0
+''')
     executable(work / 'tmp/bin/runuser', '''
 test "$1" = -u
 test "$2" = ct-brew-build
@@ -136,11 +141,16 @@ esac
     assert 'org.optional.App' not in installed['flatpak']
     assert installed['omitted_aurora_flatpaks'] == []
     assert installed['flatpak_commits'] == {'flathub:app/org.controlthings.Fixture/x86_64/stable': 'fixture-commit'}
-    # A remote failure cannot turn the default list into an empty success.
-    (work / 'tmp/commands').unlink()
-    failure_command = command[:-2] + ['--setenv', 'CT_TEST_FAIL_CATALOG', '1'] + command[-2:]
-    result = subprocess.run(failure_command, text=True, capture_output=True)
-    assert result.returncode != 0
-    assert 'runuser' not in (work / 'tmp/commands').read_text()
+    # Catalog failure cannot produce an empty success, and sandbox failure
+    # must abort before any download/installation command.
+    for failure in ('CT_TEST_FAIL_CATALOG', 'CT_TEST_FAIL_SANDBOX'):
+        (work / 'tmp/commands').unlink()
+        failure_command = command[:-2] + ['--setenv', failure, '1'] + command[-2:]
+        result = subprocess.run(failure_command, text=True, capture_output=True)
+        assert result.returncode != 0
+        failed_commands = (work / 'tmp/commands').read_text()
+        assert 'runuser' not in failed_commands
+        if failure == 'CT_TEST_FAIL_SANDBOX':
+            assert 'flatpak' not in failed_commands
 
 print('Disk-only payload shell populated Brew/Flatpak stores and metadata in an isolated filesystem')

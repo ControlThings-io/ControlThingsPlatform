@@ -1,7 +1,7 @@
 # Used only by build-disk.py; never published as a channel update image.
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE} AS tools-builder
-RUN dnf5 -y --setopt='*.countme=false' install python3 flatpak ostree tar zstd util-linux shadow-utils
+RUN dnf5 -y --setopt='*.countme=false' install python3 flatpak bubblewrap ostree tar zstd util-linux shadow-utils
 
 # Read the manifest/helper from the selected OS digest, not workflow HEAD.
 RUN test -f /usr/share/ublue-os/homebrew/controlthings.Brewfile && \

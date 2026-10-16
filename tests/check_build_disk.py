@@ -26,6 +26,18 @@ spec.loader.exec_module(disk)
 digest = "sha256:" + "a" * 64
 amd_digest = "sha256:" + "b" * 64
 payload_id = "sha256:" + "d" * 64
+for value in (payload_id, payload_id.removeprefix("sha256:"),
+              "348b624b76c0081b9ff003d42b0351b3a3f2c531561e19f692d1833174f9df33"):
+    assert disk.canonical_image_id(value) == "sha256:" + value.removeprefix("sha256:")
+for value in ("", "d" * 12, "d" * 63, "d" * 65, "g" * 64,
+              "sha512:" + "d" * 64, "sha256:sha256:" + "d" * 64,
+              "d" * 64 + "\n"):
+    try:
+        disk.canonical_image_id(value)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"Invalid image ID accepted: {value!r}")
 image = "ghcr.io/controlthings-io/controlthingsplatform"
 builder = "ghcr.io/osbuild/image-builder@sha256:" + "c" * 64
 info = {
@@ -111,7 +123,11 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                 def command(*args, capture=False):
                     commands.append(args)
                     if args[:4] == ("sudo", "podman", "image", "inspect"):
-                        return payload_id if "{{.Id}}" in args else digest
+                        if "{{.Id}}" in args:
+                            # Ubuntu's Podman returns bare IDs; other versions
+                            # include the sha256 prefix. Both must be accepted.
+                            return payload_id.removeprefix("sha256:") if kind == "qcow2" else payload_id
+                        return digest
                     if "--entrypoint" in args:
                         return json.dumps({"architecture": disk.ARCHITECTURES[architecture],
                                            "homebrew_versions": ["fixture 1.0"],
@@ -149,6 +165,7 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                 assert "--pull=never" in payload_build and "--no-cache" in payload_build
                 assert payload_build[payload_build.index("--tag") + 1] == f"{image}:{channel}"
                 assert "--cap-add" in payload_build and "SYS_ADMIN" in payload_build
+                assert "NET_ADMIN" in payload_build
                 invocation = next(cmd for cmd in commands if "--output-name" in cmd)
                 assert "--bootc-pull-container" not in invocation
                 assert invocation[invocation.index("build") + 1] == (

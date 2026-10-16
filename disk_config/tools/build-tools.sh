@@ -4,6 +4,10 @@
 # the populated stores and version metadata are copied to the disk-only image.
 set -euo pipefail
 
+# Flatpak's triggers need a working nested network namespace even when its
+# install command treats trigger failures as warnings. Check before downloads.
+bwrap --unshare-net --ro-bind / / /usr/bin/true
+
 # Aurora's /home symlink points to /var/home, which can be absent in a build
 # container. Create its target before using /home for Homebrew's bottle prefix.
 mkdir -p /out /var/home
@@ -51,7 +55,8 @@ rm -rf /home/linuxbrew/.cache
 # Deploy now, including extra-data sandbox scripts. Nothing needs to be
 # downloaded or deployed on the installed machine's first boot.
 # As in Aurora's ISO builder, permit bwrap's namespace setup inside the build
-# container. The caller grants SYS_ADMIN only to this manual disk-build stage.
+# container. SYS_ADMIN permits mounts; NET_ADMIN permits loopback setup in
+# bwrap's private network namespace. Only this manual stage receives these caps.
 mount -o remount,rw /proc/sys
 mapfile -t apps < /tmp/controlthings-flatpaks.txt
 flatpak install --system --noninteractive --assumeyes \

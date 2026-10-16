@@ -32,6 +32,18 @@ def run(*args: str, capture: bool = False) -> str:
     return result.stdout.strip() if capture else ""
 
 
+def canonical_image_id(value: str) -> str:
+    """Return a sha256-prefixed ID from Podman's bare or prefixed full ID.
+
+    Podman versions differ in inspect's .Id presentation. Reject abbreviated,
+    malformed and non-SHA256 IDs; metadata always records the canonical form.
+    """
+    match = re.fullmatch(r"(?:sha256:)?([a-f0-9]{64})", value)
+    if not match:
+        raise ValueError("Disk payload has an invalid local image ID")
+    return f"sha256:{match[1]}"
+
+
 def channel_for(tag: str) -> str:
     """Accept channel or fully dated tags; preserve course hyphens/underscores."""
     match = re.fullmatch(
@@ -125,13 +137,13 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
     # Retag locally with the original channel so installed updates keep following
     # the published, lean OS image rather than the disposable derivative.
     run("sudo", "podman", "build", "--arch", architecture, "--pull=never", "--no-cache",
-        "--cap-add", "SYS_ADMIN", "--security-opt", "label=disable",
+        "--cap-add", "SYS_ADMIN", "--cap-add", "NET_ADMIN",
+        "--security-opt", "label=disable",
         "--build-arg", f"BASE_IMAGE={source}", "--tag", channel,
         "--file", "disk_config/tools/Containerfile", "disk_config/tools")
-    payload_id = run("sudo", "podman", "image", "inspect", "--format",
-                     "{{.Id}}", channel, capture=True)
-    if not re.fullmatch(r"sha256:[a-f0-9]{64}", payload_id):
-        raise ValueError("Disk payload has an invalid local image ID")
+    payload_id = canonical_image_id(run(
+        "sudo", "podman", "image", "inspect", "--format",
+        "{{.Id}}", channel, capture=True))
     tools = json.loads(run("sudo", "podman", "run", "--rm", "--entrypoint", "cat", channel,
                           "/var/lib/controlthings/tools/installed.json", capture=True))
     if tools["architecture"] != ARCHITECTURES[architecture]:
