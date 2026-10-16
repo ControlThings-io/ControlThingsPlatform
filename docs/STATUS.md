@@ -218,14 +218,14 @@
   config transfer, exact source selection, OCI import/tag/lint, cleanup);
   workflow YAML and sole Chunkah stage; Renovate configuration parsing and
   dependency regex extraction; `git diff --check`.
-- User reports all commits, including Chunkah integration, worked. The exact
-  successful CI run was not recorded here. Previous local checks mocked the
-  orchestration; VM update/download measurements and Renovate's full config
-  validator remain unrecorded.
-- Next: build the image in CI; boot a QCOW2 and test updating an existing VM;
-  verify labels, package inventory, wallpaper defaults, and absence of countme
-  build state. Compare replacement-layer sizes across two fixed-input builds.
-  A larger first migration download is possible; RPM/DNF database churn remains.
+- Successful Chunkah CI runs are now identified for `895b82a` and `0a629cc`;
+  the user reports upgrading between them with a download above 1.2 GB. The
+  [file-level comparison](#bootc-update-895b82a-to-0a629cc--2026-10-15) accounts
+  for 1,225,805,091 replacement-layer bytes. Both builds already used Chunkah;
+  this was not a migration between rechunkers.
+- Next: evaluate the timestamp, packing and cache-isolation proposals in that
+  comparison, then measure two builds with identical pinned inputs. Full offline
+  disk validation remains above; Renovate's full validator remains unrecorded.
 
 ## Weekly container build schedule — 2026-10-15
 
@@ -257,6 +257,104 @@
   the large unpackaged-content layer stays identical. No container build or
   measured post-fix update performed. A first replacement download is expected;
   RPM/DNF database churn is still separate outstanding work.
+
+## Bootc update 895b82a to 0a629cc — 2026-10-15
+
+Investigated the user's first bootc upgrade from `latest.20261015-895b82a` to
+`latest.20261016-0a629cc` (linux/amd64). These version labels map to registry tags
+`latest-20261015-895b82a` and `latest-20261016-0a629cc`. Verified raw manifest
+SHA-256, image configurations, successful CI logs, all 134 nonshared layer blobs
+against registry digests/sizes, tar metadata and file hashes. Resolved hardlink
+targets when comparing payloads; did not execute image contents. Queried copies
+of both RPM databases with the host RPM tool. Analysis made no pipeline changes.
+
+- Old digest: `sha256:9d442c2fc8a5e5325c0a3819c5ec0d10a86c36a5525c0161c5882c95f331ed43`;
+  256 layers / 6,070,275,884 compressed bytes.
+  [Successful build](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/38805809091).
+- New digest: `sha256:86924d86689f41aae0dab595cc252e20a880720df050bd693d52a19135cd2c28`;
+  256 layers / 6,145,125,128 compressed bytes.
+  [Successful build](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/38851065777).
+- Shared: 189 layer digests / 4,919,320,037 bytes. Replacements: 67 layers /
+  **1,225,805,091 bytes (1.226 GB / 1,169.019 MiB)**. All 67 uncompressed
+  identities differ too. Image growth is only **74,849,244 bytes (71.382 MiB)**.
+  This accounts for the reported download; exact VM traffic/cached-layer state
+  was not captured.
+- Both CI runs pulled the same 256 Aurora base layer digests and base config
+  `sha256:23edd628d828343beb16826b08c487b8dd9c6c12fb204838599624f476a554c7`.
+  Both used Chunkah 0.7.0 at the same pinned digest and `--max-layers 256`.
+  No base-image update or rechunker migration explains this pair.
+
+| New layer category | Count | Compressed MiB | Finding |
+| --- | ---: | ---: | --- |
+| Repacked component groups | 52 | 624.666 | Changed membership redistributes existing RPMs and new assets |
+| Initramfs | 1 | 241.194 | Only ancestor directory `usr/lib` mtime differs |
+| ControlThings wallpapers | 6 | 98.190 | Identical image bytes; only file/directory mtimes differ |
+| glibc | 1 | 81.205 | Only `etc/ld.so.cache` content differs |
+| RPM database | 1 | 51.084 | `usr/share/rpm/rpmdb.sqlite` and ancestor metadata differ |
+| Unclaimed files | 1 | 19.190 | New small assets/configuration and RPM shared-memory state; timestamp churn |
+| Python | 1 | 16.384 | Only two regenerated `.pyc` files differ |
+| DNF | 1 | 4.428 | Six package-manager state files differ |
+| New standalone components | 3 | 32.678 | uv, CyberChef main.js and English OCR data; other additions are in grouped layers |
+
+Within the nonshared layers, 91,596 existing nondirectory paths have identical
+payloads. Only 11 existing paths have different bytes: the linker cache; DNF's
+three TOML state files and transaction SQLite/SHM/WAL; two Python bytecode caches;
+and RPM's SQLite/SHM. There are 190 added paths totaling 140,833,953 uncompressed
+regular-file bytes, including CyberChef (83,120,530 bytes), four fonts (9,802,112),
+uv/uvx (44,684,984), and other files (3,226,327). The sole removed path is the old
+Gqrx preinstall declaration. Regular/hardlink serialization also changes with
+packing; this does not imply changed file contents.
+
+RPM inventory grows from 2,594 to 2,596 packages: only `uv-0.12.19-1.fc44.x86_64`
+and `jemalloc-5.3.0-14.fc44.x86_64` are added. No packages change version or are
+removed. Fish, Python and xdg-utils were already installed; explicitly requesting
+them changes DNF installation reasons. Brew/Flatpak apps remain disk-only and
+are absent from this normal container update. The user also added terminal,
+shell, Starship/macchina configuration and SauceCodePro fonts between the builds.
+
+The initramfs SHA-256 is identical:
+`41ac74a893c06f388b4786fd9ef8a3b0faab277f1a66c81e0d14d673a2ed316a`.
+Its layer differs only in `usr/lib` mtime, from 1791855938 to 1791855991 after
+Chunkah's component-specific clamping. All six wallpaper layers likewise compare
+identically after excluding mtimes. These seven timestamp-only replacements
+total **355,869,404 compressed bytes (339.384 MiB)**. Fresh checkout timestamps
+propagate through `cp -avf /ctx/system_files/. /`; unlike CyberChef's release
+timestamps, repository assets have no normalization. Parent directory mtimes
+also change during installation. Normalizing only wallpaper file mtimes would
+leave ancestor-directory invalidation unresolved.
+
+Packing logs show 1,561 -> 1,583 components (RPM: 1,541 -> 1,543; bigfiles:
+12 -> 32). With 204 large singleton slots, the remaining 52 slots change from
+44 medium/8 low-stability bins to 46/6. Chunkah hashes component names modulo
+the bin count, so changed counts redistribute unchanged packages. Its stability
+classification and size thresholds are recalculated from the current inputs.
+CyberChef/font additions and elapsed build time can affect those inputs; their
+individual contributions were not isolated in controlled rebuilds. Exact code:
+[packing](https://github.com/coreos/chunkah/blob/v0.7.0/src/packing.rs),
+[tar timestamps](https://github.com/coreos/chunkah/blob/v0.7.0/src/tar.rs).
+
+The two changed Python caches are `stringprep.cpython-314.pyc` and
+`encodings/idna.cpython-314.pyc`. Their marshalled code objects compare equal;
+the bytecode serialization/header differs. Runtime compilation during the new
+Python HTTPS installer is the likely trigger, not a Python package upgrade.
+
+Proposals, not accepted changes: normalize repository asset and ancestor
+directory timestamps reproducibly before rechunking; give CyberChef/fonts stable
+component identities and realistic update intervals, then benchmark packing;
+prevent build-only Python bytecode writes and evaluate isolation of generated
+RPM/DNF/linker state while preserving inventory. Increasing the layer limit or
+changing SOURCE_DATE_EPOCH is not a demonstrated fix: packing and per-component
+mtime clamping must be tested. Validate identical-input rebuilds and then a
+one-small-file update before claiming reduced downloads.
+
+Ancillary metadata discrepancy: both manifests retain inherited OSTree
+annotations naming kernel 7.2.9, while configs and actual initramfs paths name
+7.2.5. Both configs also retain Aurora's revision rather than our source SHA.
+These are metadata issues, not evidence of changed kernels or this download's
+cause. No metadata correction was made during this analysis.
+
+Temporary manifests, inventories, source excerpts and inspection scripts are
+under `/tmp/ct-layer-analysis` for this session; no blobs/logs were added to Git.
 
 ## Exact image update analysis — 2026-10-15
 
