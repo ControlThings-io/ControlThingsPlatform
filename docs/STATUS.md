@@ -1,5 +1,28 @@
 # Current status
 
+## Disk diagnostic permission fix — 2026-10-16
+
+- Submitted space-recovery commit `9865b75`; its automatic container
+  [run 38946205349](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/38946205349)
+  succeeded, publishing `latest-20261016-9865b75`. Dispatched AMD64 disks from
+  that dated source as authorized.
+- Both jobs in [run 38947930879](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/38947930879)
+  built the populated payload but failed before pruning: the new unprivileged
+  `df` diagnostic could not access `/var/lib/containers/storage`. This was an
+  introduced regression, not a new package-installation failure. The diagnostic
+  showed about 73 GiB free before stopping; full assembly capacity is still
+  untested because the scoped cleanup and image-builder were never reached.
+- Run both storage diagnostics through sudo, matching the rootful Podman
+  commands. Existing privilege boundaries and scoped cleanup are unchanged.
+- The orchestration regression now models denied access to rootful storage
+  without sudo. It reproduced the exception before the fix and passed afterward
+  for both formats, architectures and channel spellings, including failure
+  propagation. Python syntax and whitespace review passed.
+- Remaining: submit this fix and run fresh AMD64 disks. Prior one-time submission
+  authorization ended with the preceding attempt; these changes are uncommitted.
+  Successful scoped cleanup in full CI and full-size disk/boot validation remain
+  outstanding. uv work remains paused.
+
 ## Disk assembly space recovery — 2026-10-16
 
 - [Run 38861667838](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/38861667838)

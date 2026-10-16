@@ -155,11 +155,12 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
     # its duplicate stores before osbuild imports another copy of the payload.
     # This invocation's label exists only on that disposable stage; keep the
     # tagged payload, its ancestors and every unrelated image untouched.
-    run("df", "-h", str(output), "/var/lib/containers/storage")
+    # Rootful Podman's storage directory requires root even for statfs/df.
+    run("sudo", "df", "-h", str(output), "/var/lib/containers/storage")
     run("sudo", "podman", "image", "prune", "--force", "--filter",
         f"label=io.controlthings.disk-build={build_id}")
     run("sudo", "podman", "system", "df")
-    run("df", "-h", str(output), "/var/lib/containers/storage")
+    run("sudo", "df", "-h", str(output), "/var/lib/containers/storage")
     image_type, bootc_ref = "qcow2", channel
     name = f'{metadata["image"].rsplit("/", 1)[-1]}-{metadata["source_tag"]}-{architecture}'
     extra = []

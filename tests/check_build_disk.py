@@ -122,6 +122,10 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
 
                 def command(*args, capture=False):
                     commands.append(args)
+                    # Rootful Podman's storage directory is inaccessible to
+                    # the runner account, even for a read-only df diagnostic.
+                    if args[0] == "df" and "/var/lib/containers/storage" in args:
+                        raise subprocess.CalledProcessError(1, args, stderr="Permission denied")
                     if args[:4] == ("sudo", "podman", "image", "inspect"):
                         if "{{.Id}}" in args:
                             # Ubuntu's Podman returns bare IDs; other versions
@@ -172,6 +176,9 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                 build_id = build_id_arg.split("=", 1)[1]
                 assert len(build_id) == 32 and all(c in "0123456789abcdef" for c in build_id)
                 cleanup = next(cmd for cmd in commands if "prune" in cmd)
+                diagnostics = [cmd for cmd in commands if "df" in cmd and "-h" in cmd]
+                assert diagnostics == [("sudo", "df", "-h", str(output),
+                                        "/var/lib/containers/storage")] * 2
                 assert cleanup == ("sudo", "podman", "image", "prune", "--force", "--filter",
                                    f"label=io.controlthings.disk-build={build_id}")
                 assert commands.index(cleanup) > commands.index(payload_build)
