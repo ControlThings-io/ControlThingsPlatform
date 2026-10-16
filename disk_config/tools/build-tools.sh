@@ -4,7 +4,10 @@
 # the populated stores and version metadata are copied to the disk-only image.
 set -euo pipefail
 
-mkdir -p /out /home/linuxbrew
+# Aurora's /home symlink points to /var/home, which can be absent in a build
+# container. Create its target before using /home for Homebrew's bottle prefix.
+mkdir -p /out /var/home
+mkdir -p /home/linuxbrew
 # The inherited default Flatpak list is the same list Aurora's ISO uses. Optional
 # CLI, fonts, DX, and other ujust Brewfiles are not disk provisioning inputs.
 flatpak remote-add --system --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo

@@ -23,7 +23,7 @@ def executable(path: Path, body: str) -> None:
 
 with tempfile.TemporaryDirectory(prefix='ct-payload-build-') as temporary:
     work = Path(temporary)
-    for name in ('home', 'flatpak', 'out', 'tmp/bin', 'libexec', 'manifests'):
+    for name in ('var', 'flatpak', 'out', 'tmp/bin', 'libexec', 'manifests'):
         (work / name).mkdir(parents=True)
     custom = ROOT / 'system_files/usr/share/ublue-os/homebrew/controlthings.Brewfile'
     (work / 'manifests/controlthings.Brewfile').write_bytes(custom.read_bytes())
@@ -99,8 +99,8 @@ esac
         '--ro-bind', '/usr', '/usr', '--ro-bind', '/etc', '/etc',
         '--symlink', 'usr/bin', '/bin', '--symlink', 'usr/sbin', '/sbin',
         '--symlink', 'usr/lib', '/lib', '--symlink', 'usr/lib64', '/lib64',
-        '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/var',
-        '--bind', str(work / 'home'), '/var/home', '--symlink', 'var/home', '/home',
+        '--proc', '/proc', '--dev', '/dev', '--bind', str(work / 'var'), '/var',
+        '--symlink', 'var/home', '/home',
         '--bind', str(work / 'flatpak'), '/var/lib/flatpak',
         '--bind', str(work / 'out'), '/out',
         '--bind', str(work / 'tmp'), '/tmp',
@@ -112,8 +112,11 @@ esac
         '--setenv', 'PATH', '/tmp/bin:/usr/bin:/usr/sbin',
         '/usr/bin/bash', '/build-tools.sh',
     ]
+    # Match the build container: /home is dangling until the script creates
+    # /var/home. Pre-binding /var/home would hide the first disk CI failure.
+    assert not (work / 'var/home').exists()
     subprocess.run(command, check=True)
-    assert (work / 'home/linuxbrew/.linuxbrew/Cellar/fixture/1.0/installed').read_text() == 'fixture\n'
+    assert (work / 'var/home/linuxbrew/.linuxbrew/Cellar/fixture/1.0/installed').read_text() == 'fixture\n'
     assert (work / 'flatpak/app/org.controlthings.Fixture/fixture').read_text() == 'installed-app\n'
     assert (work / 'out/homebrew-versions.txt').read_text() == 'fixture 1.0\n'
     assert (work / 'out/flatpak-architecture.txt').read_text() == 'x86_64\n'

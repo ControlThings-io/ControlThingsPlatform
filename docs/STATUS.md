@@ -2,6 +2,15 @@
 
 ## Bundled Homebrew and Flatpak tools — 2026-10-15
 
+- First full disk CI attempt at `0a629cc` failed in both AMD64 formats:
+  [run 38852574792](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/38852574792).
+  The selected published OS passed the manifest/helper checks, but the payload
+  shell failed before app installation because `/home` pointed to absent
+  `/var/home`. Fixed by creating the symlink target before the Homebrew home.
+  The isolated shell fixture now starts with `/var/home` absent; it reproduced
+  the exact CI error before the fix and passed afterward. Disk orchestration,
+  tool manifest/installer regressions and whitespace review also passed.
+  The corrected workflow has not run remotely yet.
 - Corrected the build boundary to the user's clarified design. Normal container
   builds carry only the shared manifest/manual helper and recipe; the tools stage,
   archives, changing cache argument, seed service and Homebrew ordering override
@@ -65,7 +74,7 @@
 - Earlier live catalogs verified the requested formula names, Linux bottles for
   `libbladerf`, `librtlsdr`, and `gping`, and Flathub availability on both arches
   except ZAP on ARM64. Lynis/sqlmap are script formulae without Linux bottles.
-- Remaining: publish the new normal container, then full manual disk CI, actual
+- Remaining: submit the disk-build fix, then rerun full manual disk CI, actual
   formula/dependency installation, Obsidian apply_extra in Podman's nested sandbox,
   full-payload OCI/SELinux handling, and bootc import of the prepared
   `/var` stores. Install ISO and boot QCOW2 with networking disconnected, verify
