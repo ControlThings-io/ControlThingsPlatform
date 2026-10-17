@@ -1,5 +1,24 @@
 # Current status
 
+## ISO installer pin refresh — 2026-10-16
+
+- Replaced the unavailable Fedora 44 installer index with
+  `sha256:9db34195bc0b6be43e17c20ca840be5bc153093c94b62f6792a76fb199eeaced`.
+  Registry metadata identifies version `44.20261016.0`; verified Linux AMD64 and
+  ARM64 manifests. The old digest still returned `manifest unknown`.
+- Real AMD64 ISO preflight passed against the retained descriptor from successful
+  [QCOW2 run 38990955138](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/38990955138).
+  Disk orchestration and retained-payload regression checks passed, as did
+  whitespace review. Preparation recipe hash still matches the retained payload.
+  Checks fetched only registry metadata; no full installer download/build or VM
+  validation was performed. The pin update is uncommitted; user will run ISO CI.
+- After commit/push, dispatch AMD64 / ISO with source tag
+  `latest-20261017-59659b7` and payload reference:
+  `ghcr.io/controlthings-io/controlthingsplatform-disk-payload@sha256:066031ab6dcddf2db1980e7cf48d3d78bea2d4f2e004ec9f7d7ec5fd0c7cc4c1`.
+  No new OS container build is required. Keep this dated source even if a newer
+  OS tag publishes; reuse validates its original source digest.
+
+
 ## Retained payload implementation — 2026-10-16
 
 - User confirmed the smoke QCOW2 build succeeded and is downloading it for VM
@@ -25,15 +44,13 @@
   of the existing smoke source and QCOW2 builder preflight passed. The live check
   caught Skopeo's rejection of tag@digest references; preflight now strips only
   the tag and a regression covers it. No large local downloads or app builds.
-- Pending: first GHCR cache push/pull using repository workflow permissions and
-  real disk assembly through the new split; cross-run payload reuse; full-size
-  storage validation. No remote workflow dispatched or changes submitted here.
-- Next after commit/push: dispatch AMD64/QCOW2 using existing source tag
-  `latest-20261017-5d6b593`, with `payload_ref` blank. No new OS container is
-  required for these workflow-only changes. Save the resulting payload digest
-  from the summary; use it with the same source tag for the next reuse test.
-  ISO remains blocked by the old Fedora installer pin until separately repaired;
-  its new preflight should fail before package preparation. uv remains pending.
+- Submitted as `59659b7`. [Run 38990955138](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/38990955138)
+  successfully prepared/published/retrieved the GHCR payload and assembled QCOW2;
+  its artifact archive is 8,209,935,549 bytes. Source: `latest-20261017-59659b7`.
+  User is still downloading the first smoke VM for offline testing.
+- Next: cross-run reuse through ISO using the refreshed installer pin above.
+  Full-size storage, offline VM boot/upgrade and uv provisioning remain pending.
+
 
 
 ## Minimal AMD64 QCOW2 preparation — 2026-10-16
