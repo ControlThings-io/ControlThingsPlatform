@@ -336,6 +336,8 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
         payload_id, tools = prepare(metadata, output)
     image_type, bootc_ref = "qcow2", channel
     name = f'{metadata["image"].rsplit("/", 1)[-1]}-{metadata["source_tag"]}-{architecture}'
+    # Preserve accurate filenames when assembling retained historical smoke payloads.
+    # Current ControlThings bundles use the standard name without a smoke suffix.
     if tools.get("profile") == "smoke":
         name += "-smoke"
     extra = []

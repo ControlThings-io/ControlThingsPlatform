@@ -23,12 +23,15 @@ tools = module_from_spec(spec)
 loader.exec_module(tools)
 manifest_path = ROOT / 'system_files/usr/share/ublue-os/homebrew/controlthings.Brewfile'
 manifest = tools.read_manifest(manifest_path, arch='x86_64')
-assert manifest == {'brew': ['ripgrep'], 'flatpak': ['org.kde.okteta', 'io.github.kolunmi.Bazaar']}
-assert tools.read_manifest(manifest_path, arch='aarch64') == manifest
-# Keep testing the full preserved list, including architecture restrictions.
-full_manifest_text = '\n'.join(
-    line[2:] if line.startswith(('# brew ', '# flatpak ')) else line
-    for line in manifest_path.read_text().splitlines())
+assert len(manifest['brew']) == 29
+assert manifest['flatpak'] == [
+    'dk.gqrx.gqrx', 'io.github.kolunmi.Bazaar', 'md.obsidian.Obsidian',
+    'net.werwolv.ImHex', 'org.kde.okteta', 'org.zaproxy.ZAP']
+assert 'ettercap' not in manifest['brew']
+arm_manifest = tools.read_manifest(manifest_path, arch='aarch64')
+assert arm_manifest['brew'] == manifest['brew']
+assert arm_manifest['flatpak'] == [app for app in manifest['flatpak'] if app != 'org.zaproxy.ZAP']
+full_manifest_text = manifest_path.read_text()
 
 with tempfile.TemporaryDirectory(prefix='ct-tools-tests-') as temporary:
     for invalid in ('brew "bat"\nbrew "bat"\nflatpak "org.test.App"\n',
@@ -67,12 +70,12 @@ with tempfile.TemporaryDirectory(prefix='ct-tools-tests-') as temporary:
         assert set(selected['manifests_sha256']) == {'system-flatpaks.Brewfile', 'controlthings.Brewfile'}
         assert selected['manifests_sha256']['system-flatpaks.Brewfile'] == hashlib.sha256(upstream.read_bytes()).hexdigest()
         with patch.object(tools, 'MANIFEST', manifest_path):
-            smoke = tools.disk_selection(arch='x86_64', include_aurora=False)
-            assert smoke['flatpak'] == ['org.kde.okteta', 'io.github.kolunmi.Bazaar']
-            assert smoke['brew'] == ['ripgrep']
-            assert smoke['aurora_flatpaks'] == []
-            assert smoke['profile'] == 'smoke'
-            assert tools.available_disk_selection(smoke, {'org.kde.okteta', 'io.github.kolunmi.Bazaar'}) == smoke
+            custom = tools.disk_selection(arch='x86_64', include_aurora=False)
+            assert custom['flatpak'] == manifest['flatpak']
+            assert custom['brew'] == manifest['brew']
+            assert custom['aurora_flatpaks'] == []
+            assert custom['profile'] == 'controlthings'
+            assert tools.available_disk_selection(custom, set(manifest['flatpak'])) == custom
         assert selected['profile'] == 'full'
         available = set(selected['flatpak'])
         assert tools.available_disk_selection(selected, available)['omitted_aurora_flatpaks'] == []

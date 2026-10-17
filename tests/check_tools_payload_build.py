@@ -139,9 +139,13 @@ esac
     assert installed['homebrew_versions'] == ['fixture 1.0']
     assert installed['manifests_sha256']['controlthings.Brewfile'] == hashlib.sha256(custom.read_bytes()).hexdigest()
     assert set(installed['manifests_sha256']) == {'controlthings.Brewfile', 'system-flatpaks.Brewfile'}
-    assert installed['flatpak'] == ['org.kde.okteta', 'io.github.kolunmi.Bazaar']
-    assert installed['brew'] == ['ripgrep']
-    assert installed['profile'] == 'smoke'
+    assert installed['flatpak'] == ['dk.gqrx.gqrx', 'io.github.kolunmi.Bazaar',
+                                   'md.obsidian.Obsidian', 'net.werwolv.ImHex',
+                                   'org.kde.okteta', 'org.zaproxy.ZAP']
+    assert len(installed['brew']) == 29
+    assert 'ripgrep' in installed['brew']
+    assert 'ettercap' not in installed['brew']
+    assert installed['profile'] == 'controlthings'
     assert installed['aurora_flatpaks'] == []
     assert 'org.optional.App' not in installed['flatpak']
     assert installed['omitted_aurora_flatpaks'] == []

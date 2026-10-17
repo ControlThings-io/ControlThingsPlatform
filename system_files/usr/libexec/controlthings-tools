@@ -81,7 +81,7 @@ def disk_selection(*, arch: str | None = None, include_aurora: bool = True) -> D
     """Merge Aurora's ISO defaults with ControlThings; never scan optional files.
 
     Set include_aurora=False for ControlThings-only builds: validate and hash both
-    manifests but select only custom packages. Both files must exist in the selected OS. Preserve Aurora's order and append
+    manifests but select only custom packages, with profile `controlthings`. Both files must exist in the selected OS. Preserve Aurora's order and append
     our missing IDs once. Homebrew's inherited bootstrap is retained by the disk
     builder; only ControlThings formulae are added, since Aurora's CLI collection
     and DX Flatpak collection are opt-in ujust bundles. This does not change the
@@ -96,7 +96,7 @@ def disk_selection(*, arch: str | None = None, include_aurora: bool = True) -> D
         aurora['flatpak'] = []
     return {
         'architecture': arch,
-        'profile': 'full' if include_aurora else 'smoke',
+        'profile': 'full' if include_aurora else 'controlthings',
         'brew': custom['brew'],
         'flatpak': list(dict.fromkeys([*aurora['flatpak'], *custom['flatpak']])),
         'aurora_flatpaks': aurora['flatpak'],

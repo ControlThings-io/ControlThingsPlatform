@@ -7,8 +7,18 @@ The user will select apps in the ControlThings Brewfile. Include Bazaar there
 now so its app and icon are deployed before first boot; the user observed a
 missing icon until reboot with Aurora's background download. Install Firefox
 as an RPM and launch CyberChef explicitly with Firefox. This supersedes the
-2026-10-15 default-list merge and xdg-open choices below. Keep other full-bundle
-entries commented until smoke ISO validation and full-size capacity checks.
+2026-10-15 default-list merge and xdg-open choices below.
+
+Accepted follow-up after successful QCOW2 offline boot and OS update persistence:
+restore all preserved custom Brewfile entries (29 formulae, six AMD64 Flatpaks;
+ZAP excluded on ARM64), keeping ettercap removed and Aurora defaults excluded.
+This supersedes the temporary smoke selection and the earlier requirement to
+wait for ISO testing before expansion. ISO installation remains pending.
+Use `profile=controlthings` for custom-only payloads and standard filenames
+without `-smoke`; preserve historical smoke naming when reusing older payloads.
+Full-size capacity is not established by the smoke tests. Validate AMD64 QCOW2
+with a fresh payload, then reuse that payload for ISO. Per-user uv provisioning
+remains deferred; no provisioning or ownership changes are included.
 
 
 ## Retained disk application payload — 2026-10-16

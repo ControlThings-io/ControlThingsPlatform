@@ -134,7 +134,7 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                         return digest
                     if "--entrypoint" in args:
                         return json.dumps({"architecture": disk.ARCHITECTURES[architecture],
-                                           "profile": "smoke" if channel == "latest" else "full",
+                                           "profile": "controlthings" if channel == "latest" else "full",
                                            "homebrew_versions": ["fixture 1.0"],
                                            "manifests_sha256": {"controlthings.Brewfile": "e" * 64,
                                                                 "system-flatpaks.Brewfile": "f" * 64},
@@ -150,8 +150,6 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                 if kind == "iso":
                     iso_command_count = len(commands)
                 name = f"controlthingsplatform-{channel}-20261015-5118339-{architecture}"
-                if channel == "latest":
-                    name += "-smoke"
                 if kind == "iso":
                     name += "-installer"
                 artifact = output / f"{name}.{kind}"

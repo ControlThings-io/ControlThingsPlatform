@@ -10,12 +10,13 @@
 - User reports ISO build success; download and installation testing are pending.
   The refreshed installer pin is committed as `44b5d0c`; prior instructions to
   submit that pin and dispatch ISO are superseded by this result.
-- Keep Aurora defaults excluded. Added Bazaar to the reduced custom Brewfile,
+- Keep Aurora defaults excluded. Added Bazaar to the custom Brewfile,
   Firefox to RPM installation, and Firefox as CyberChef's explicit launcher.
   See [accepted selection](DECISIONS.md#explicit-application-selection--2026-10-17).
 - Changes require a new OS container and freshly prepared payload; the retained
-  older payload does not contain this selection. Leave full-bundle expansion
-  and uv provisioning pending. No submission or remote build performed here.
+  older payload does not contain this selection. Application-selection changes
+  are committed as `ec2cc8a`; full-bundle changes below remain uncommitted.
+  No remote build performed in this step.
 - Local checks passed: manifest/manual installer, isolated payload shell, CyberChef,
   disk orchestration, retained-payload reuse, Bash syntax and whitespace review.
   Corrected a stale full-list count after the already committed ettercap removal.
@@ -24,11 +25,22 @@
   icon plus Firefox/CyberChef launching in an image containing the new changes.
   Full-size capacity remains unvalidated. The user's skeleton shortcut changes
   are now committed separately as `2181603`; preserve that work.
-- Proposed next scope (not yet implemented): restore the selected full custom
-  Brewfile, keep Aurora defaults excluded, and replace smoke-specific naming and
-  profile metadata. Build AMD64 QCOW2 with a fresh prepared payload, validate
-  capacity and offline app launches, then reuse that payload for ISO assembly.
-  Keep per-user uv provisioning separate from this bundle expansion.
+- Enabled the full custom Brewfile: 29 Homebrew formulae and six AMD64
+  Flatpaks (five on ARM64; ZAP excluded). Ettercap remains removed and Aurora
+  defaults remain excluded. Both Brewfile lists are alphabetized by package
+  name/application ID, retaining entry-specific comments. Custom-only metadata now uses `profile=controlthings`;
+  new artifact filenames have no smoke suffix. Historical smoke payload reuse
+  retains its original profile and filename. Per-user uv provisioning is deferred.
+- Local validation for expansion passed: manifest/manual installer on both
+  architectures, isolated payload shell with the full selected list, disk
+  orchestration/workflow parsing, and retained-payload reuse including historical
+  smoke names. Bash syntax and whitespace review passed. These checks use fixture
+  package commands; they do not validate real full-bundle installation or capacity.
+- Next: publish the changed OS container, prepare a fresh AMD64 QCOW2 payload,
+  inspect runner space and artifact sizes, and test offline GUI/Brew launches.
+  Verify Bazaar's first-login icon and Firefox/CyberChef launching. Reuse the
+  successful payload for ISO assembly; finish blank-disk ISO installation testing.
+  No full image build or VM check of the expanded bundle has been performed.
 
 ## Retained payload implementation — 2026-10-16
 
