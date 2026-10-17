@@ -80,8 +80,9 @@ case "$1" in
     config) ;;
     install)
         [[ " $* " != *" --no-deploy "* ]]
-        [[ " $* " == *" org.mozilla.firefox "* ]]
-        [[ " $* " == *" io.github.kolunmi.Bazaar "* ]]
+        [[ " $* " != *" org.mozilla.firefox "* ]]
+        [[ " $* " != *" io.github.kolunmi.Bazaar "* ]]
+        [[ " $* " == *" org.kde.okteta"* ]]
         [[ " $* " != *" org.optional.App "* ]]
         mkdir -p /var/lib/flatpak/app/org.controlthings.Fixture
         echo installed-app > /var/lib/flatpak/app/org.controlthings.Fixture/fixture
@@ -138,9 +139,10 @@ esac
     assert installed['homebrew_versions'] == ['fixture 1.0']
     assert installed['manifests_sha256']['controlthings.Brewfile'] == hashlib.sha256(custom.read_bytes()).hexdigest()
     assert set(installed['manifests_sha256']) == {'controlthings.Brewfile', 'system-flatpaks.Brewfile'}
-    assert 'org.mozilla.firefox' in installed['flatpak']
-    assert 'io.github.kolunmi.Bazaar' in installed['flatpak']
-    assert installed['flatpak'].count('dk.gqrx.gqrx') == 1
+    assert installed['flatpak'] == ['org.kde.okteta']
+    assert installed['brew'] == ['ripgrep']
+    assert installed['profile'] == 'smoke'
+    assert installed['aurora_flatpaks'] == []
     assert 'org.optional.App' not in installed['flatpak']
     assert installed['omitted_aurora_flatpaks'] == []
     assert installed['flatpak_commits'] == {'flathub:app/org.controlthings.Fixture/x86_64/stable': 'fixture-commit'}

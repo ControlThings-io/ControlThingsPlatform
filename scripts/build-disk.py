@@ -163,6 +163,8 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
     run("sudo", "df", "-h", str(output), "/var/lib/containers/storage")
     image_type, bootc_ref = "qcow2", channel
     name = f'{metadata["image"].rsplit("/", 1)[-1]}-{metadata["source_tag"]}-{architecture}'
+    if tools.get("profile") == "smoke":
+        name += "-smoke"
     extra = []
     if kind == "iso":
         image_type, bootc_ref = "bootc-generic-iso", "localhost/controlthings-installer:build"

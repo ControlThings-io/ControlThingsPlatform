@@ -1,5 +1,31 @@
 # Current status
 
+## Minimal AMD64 QCOW2 preparation — 2026-10-16
+
+- At clean starting revision `95107d6`, the diagnostic fix was already committed.
+  Latest [disk run 38968156608](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/38968156608)
+  completed app preparation and reclaimed about 15 GiB. ISO then failed on an
+  unavailable pinned Fedora installer manifest. QCOW2 completed conversion but
+  ran out of disk space during final export. Neither artifact was boot-tested.
+- Reduced the shared Brewfile to ripgrep and Okteta, preserving every other
+  package as a commented declaration. Disk preparation explicitly excludes
+  Aurora defaults without modifying the upstream list. Dependencies remain.
+- Added output-format selection, defaulting to QCOW2, and smoke filenames/profile
+  metadata. Manual installation follows the reduced shared list as documented.
+- Local checks passed: manifest/installer regressions (including the preserved
+  full list and ARM64 restrictions), disk orchestration and workflow parsing,
+  and the isolated payload shell verifying that only ripgrep/Okteta are selected
+  and Aurora defaults are absent. These use fixtures, not actual package builds.
+- Next: commit/push when authorized, wait for the new container, then dispatch
+  AMD64 with `format=qcow2` and the new dated source tag. Old sources still carry
+  the full manifest and lack the helper exclusion option. No CI dispatched here.
+- Boot QCOW2 offline, create the first user, verify Brew ownership, launch ripgrep
+  and Okteta, then upgrade to the normal OS and verify application persistence.
+  ISO pin repair, full-size capacity, reusable payload caching/size measurements,
+  and per-user uv implementation remain outstanding. Step 1 is prepared, not
+  established successful. See [usage](../README.md#bundled-homebrew-and-flatpak-tools).
+
+
 ## Disk diagnostic permission fix — 2026-10-16
 
 - Submitted space-recovery commit `9865b75`; its automatic container
@@ -18,10 +44,9 @@
   without sudo. It reproduced the exception before the fix and passed afterward
   for both formats, architectures and channel spellings, including failure
   propagation. Python syntax and whitespace review passed.
-- Remaining: submit this fix and run fresh AMD64 disks. Prior one-time submission
-  authorization ended with the preceding attempt; these changes are uncommitted.
-  Successful scoped cleanup in full CI and full-size disk/boot validation remain
-  outstanding. uv work remains paused.
+- Submitted as `95107d6`; the next remote run passed these diagnostics and
+  scoped cleanup. Its later failures and the current smoke-test work are recorded
+  above. Full-size disk/boot validation remains outstanding.
 
 ## Disk assembly space recovery — 2026-10-16
 

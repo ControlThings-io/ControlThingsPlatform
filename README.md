@@ -229,6 +229,28 @@ and [DECISIONS.md](docs/DECISIONS.md#cyberchef-offline-build--2026-10-15) for ra
 
 ## Bundled Homebrew and Flatpak tools
 
+**Temporary smoke-test selection:** only `ripgrep` and `org.kde.okteta` are
+active in the Brewfile; all other requested packages remain commented out.
+The disk preparation script passes `--exclude-aurora-defaults`, so Firefox,
+Bazaar and other inherited defaults are not installed in these test images.
+Dependencies and the inherited Homebrew bootstrap are still included. The manual
+`ujust install-controlthings-tools` command also follows the reduced Brewfile;
+it does not remove applications already installed.
+
+The disk workflow defaults to `format=qcow2`; `iso` and `both` remain explicit
+choices. Use AMD64 for the initial test. Files carry a `-smoke` suffix (before
+`-installer` for ISO), and source metadata records `tools.profile=smoke`.
+These are test images, not the full classroom bundle.
+
+Publish a container containing the changed manifest and helper before dispatching
+the disk workflow with its dated image tag: the disk job reads these files from
+the selected container, not the workflow checkout. After offline VM validation,
+uncomment the desired entries and remove `--exclude-aurora-defaults` from
+`disk_config/tools/build-tools.sh` to restore the full selection.
+Python tool provisioning remains pending.
+
+The following describes the full bundle to restore after smoke testing.
+
 The [ControlThings Brewfile](system_files/usr/share/ublue-os/homebrew/controlthings.Brewfile)
 defines the apps prepared **only during manual disk-image builds**. Normal
 container builds ship the list and manual installer; they do not download or

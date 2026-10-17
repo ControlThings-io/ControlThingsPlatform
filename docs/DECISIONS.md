@@ -1,5 +1,20 @@
 # Decisions
 
+## Minimal disk validation — 2026-10-16
+
+Accepted: temporarily comment out all custom packages except ripgrep and Okteta,
+preserving the full list in place. Exclude Aurora's default Flatpak selection
+during these smoke builds; keep its upstream manifest intact. First validate one
+AMD64 QCOW2, then expand coverage and validate ISO before the full-size build.
+The workflow defaults to QCOW2 only; smoke filenames and metadata distinguish
+reduced artifacts. The manual installer also follows the reduced manifest.
+No uv provisioning is implemented in this step.
+
+Full-size storage validation remains separate: a passing smoke build cannot
+establish capacity for the complete bundle. A complete Aurora fork and installer
+migration remain proposals, not accepted changes. See [status](STATUS.md).
+
+
 ## Bundled Homebrew and Flatpak tools — 2026-10-15
 
 Accepted, as clarified by the user: prepare the requested apps only in the manual

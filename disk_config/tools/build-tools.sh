@@ -22,7 +22,8 @@ flatpak --default-arch > /out/flatpak-architecture.txt
 flatpak remote-ls --system --app --runtime --all \
     --arch="$(cat /out/flatpak-architecture.txt)" --columns=application:full flathub \
     > /tmp/controlthings-available-flatpaks.txt
-python3 /usr/libexec/controlthings-tools disk-selection \
+# Temporary smoke build: restore Aurora defaults by removing the exclusion flag.
+python3 /usr/libexec/controlthings-tools disk-selection --exclude-aurora-defaults \
     --available-flatpaks /tmp/controlthings-available-flatpaks.txt > /out/selection.json
 python3 - <<'PY'
 import json

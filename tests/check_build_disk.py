@@ -134,6 +134,7 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                         return digest
                     if "--entrypoint" in args:
                         return json.dumps({"architecture": disk.ARCHITECTURES[architecture],
+                                           "profile": "smoke" if channel == "latest" else "full",
                                            "homebrew_versions": ["fixture 1.0"],
                                            "manifests_sha256": {"controlthings.Brewfile": "e" * 64,
                                                                 "system-flatpaks.Brewfile": "f" * 64},
@@ -149,6 +150,8 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                 if kind == "iso":
                     iso_command_count = len(commands)
                 name = f"controlthingsplatform-{channel}-20261015-5118339-{architecture}"
+                if channel == "latest":
+                    name += "-smoke"
                 if kind == "iso":
                     name += "-installer"
                 artifact = output / f"{name}.{kind}"
@@ -255,7 +258,12 @@ assert workflow["jobs"]["resolve"]["runs-on"] == "ubuntu-24.04"
 runner = workflow["jobs"]["build"]["runs-on"]
 assert runner == "${{ inputs.platform == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}"
 assert "${{ inputs.platform }}" in workflow["concurrency"]["group"]
-assert workflow["jobs"]["build"]["strategy"]["matrix"]["format"] == ["iso", "qcow2"]
+formats = workflow[True]["workflow_dispatch"]["inputs"]["format"]
+assert formats["default"] == "qcow2"
+assert formats["options"] == ["qcow2", "iso", "both"]
+assert workflow["jobs"]["build"]["strategy"]["matrix"]["format"] == (
+    '${{ fromJSON(inputs.format == \'both\' && \'["iso","qcow2"]\' || format(\'["{0}"]\', inputs.format)) }}')
+
 assert workflow["jobs"]["build"]["needs"] == "resolve"
 for job in workflow["jobs"].values():
     for step in job["steps"]:

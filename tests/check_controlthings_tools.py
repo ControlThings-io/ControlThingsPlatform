@@ -23,13 +23,12 @@ tools = module_from_spec(spec)
 loader.exec_module(tools)
 manifest_path = ROOT / 'system_files/usr/share/ublue-os/homebrew/controlthings.Brewfile'
 manifest = tools.read_manifest(manifest_path, arch='x86_64')
-assert len(manifest['brew']) == 30
-assert {'eza', 'gping', 'libbladerf', 'librtlsdr', 'git-delta'} <= set(manifest['brew'])
-assert manifest['flatpak'] == ['dk.gqrx.gqrx', 'md.obsidian.Obsidian',
-                              'net.werwolv.ImHex', 'org.kde.okteta', 'org.zaproxy.ZAP']
-arm = tools.read_manifest(manifest_path, arch='aarch64')
-assert arm['brew'] == manifest['brew']
-assert arm['flatpak'] == manifest['flatpak'][:-1]
+assert manifest == {'brew': ['ripgrep'], 'flatpak': ['org.kde.okteta']}
+assert tools.read_manifest(manifest_path, arch='aarch64') == manifest
+# Keep testing the full preserved list, including architecture restrictions.
+full_manifest_text = '\n'.join(
+    line[2:] if line.startswith(('# brew ', '# flatpak ')) else line
+    for line in manifest_path.read_text().splitlines())
 
 with tempfile.TemporaryDirectory(prefix='ct-tools-tests-') as temporary:
     for invalid in ('brew "bat"\nbrew "bat"\nflatpak "org.test.App"\n',
@@ -45,6 +44,11 @@ with tempfile.TemporaryDirectory(prefix='ct-tools-tests-') as temporary:
         else:
             raise AssertionError(f'Accepted invalid manifest: {invalid}')
 
+    full_manifest = Path(temporary) / 'controlthings.Brewfile'
+    full_manifest.write_text(full_manifest_text)
+    assert len(tools.read_manifest(full_manifest)['brew']) == 30
+    assert len(tools.read_manifest(full_manifest, arch='x86_64')['flatpak']) == 5
+    assert len(tools.read_manifest(full_manifest, arch='aarch64')['flatpak']) == 4
     # Upstream defaults come only from the selected container's default list.
     # Duplicate IDs across lists are intentional and must install only once.
     upstream = Path(temporary) / 'system-flatpaks.Brewfile'
@@ -52,9 +56,9 @@ with tempfile.TemporaryDirectory(prefix='ct-tools-tests-') as temporary:
                         'flatpak "dk.gqrx.gqrx"\nflatpak "org.mozilla.thunderbird"\n')
     (Path(temporary) / 'cli.Brewfile').write_text('brew "forbidden-optional-tool"\n')
     (Path(temporary) / 'system-dx-flatpaks.Brewfile').write_text('flatpak "org.optional.App"\n')
-    with patch.object(tools, 'AURORA_MANIFEST', upstream), patch.object(tools, 'MANIFEST', manifest_path):
+    with patch.object(tools, 'AURORA_MANIFEST', upstream), patch.object(tools, 'MANIFEST', full_manifest):
         selected = tools.disk_selection(arch='x86_64')
-        assert selected['brew'] == manifest['brew']
+        assert selected['brew'] == tools.read_manifest(full_manifest)['brew']
         assert selected['flatpak'].count('dk.gqrx.gqrx') == 1
         assert selected['flatpak'][:4] == ['org.mozilla.firefox', 'io.github.kolunmi.Bazaar',
                                          'dk.gqrx.gqrx', 'org.mozilla.thunderbird']
@@ -62,6 +66,14 @@ with tempfile.TemporaryDirectory(prefix='ct-tools-tests-') as temporary:
         assert 'org.optional.App' not in selected['flatpak']
         assert set(selected['manifests_sha256']) == {'system-flatpaks.Brewfile', 'controlthings.Brewfile'}
         assert selected['manifests_sha256']['system-flatpaks.Brewfile'] == hashlib.sha256(upstream.read_bytes()).hexdigest()
+        with patch.object(tools, 'MANIFEST', manifest_path):
+            smoke = tools.disk_selection(arch='x86_64', include_aurora=False)
+            assert smoke['flatpak'] == ['org.kde.okteta']
+            assert smoke['brew'] == ['ripgrep']
+            assert smoke['aurora_flatpaks'] == []
+            assert smoke['profile'] == 'smoke'
+            assert tools.available_disk_selection(smoke, {'org.kde.okteta'}) == smoke
+        assert selected['profile'] == 'full'
         available = set(selected['flatpak'])
         assert tools.available_disk_selection(selected, available)['omitted_aurora_flatpaks'] == []
         for missing in ('org.mozilla.thunderbird', 'dk.gqrx.gqrx'):

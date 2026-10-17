@@ -12,6 +12,15 @@ on:
         options:
           - amd64
           - arm64
+      format:
+        description: "Output format (start with QCOW2 smoke testing)"
+        required: true
+        default: qcow2
+        type: choice
+        options:
+          - qcow2
+          - iso
+          - both
       image_tag:
         description: "Container channel or dated tag (latest, ics410_l01, CHANNEL-YYYYMMDD-HASH)"
         required: true
@@ -72,7 +81,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        format: [iso, qcow2]
+        format: ${{ fromJSON(inputs.format == 'both' && '["iso","qcow2"]' || format('["{0}"]', inputs.format)) }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
