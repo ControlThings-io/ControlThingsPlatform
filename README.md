@@ -157,6 +157,18 @@ choose another background in Plasma's Screen Locking settings and verify that
 the choice survives another lock and a logout/login. This does not change the
 login screen shown before signing in, or locking and password requirements.
 
+## Automatic update defaults
+
+New installations disable automatic updates through the
+[systemd preset](system_files/usr/lib/systemd/system-preset/00-controlthings-updates.preset).
+Run `ujust toggle-updates` to enable them or `ujust update` to update manually.
+The preset disables Aurora's updater and the rpm-ostree/bootc automatic update
+timers; it does not mask update services.
+
+Rebuild the OS container and prepare a fresh disk payload to include these
+defaults. After installation, check `systemctl is-enabled uupd.timer` reports
+`disabled`. Existing installations may retain local systemd enablement choices across OS updates.
+
 ## ControlThings capture groups
 
 ControlThings follows Aurora's one-time startup setup pattern for the

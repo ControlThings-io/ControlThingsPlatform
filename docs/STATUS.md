@@ -1,5 +1,26 @@
 # Current status
 
+## Course automatic update defaults — 2026-10-17
+
+- Working on `ics410_l01` at `af3091b`, after the user merged main and switched
+  the base to normal Aurora with selected RPM additions. The user committed
+  full-bundle expansion as `6d17d8c`, including additional selected Aurora
+  Flatpaks (currently 29 formulae and 16 AMD64 Flatpaks; ZAP excluded on ARM64).
+  The previous six-Flatpak counts below describe the earlier reviewed bundle.
+- Added an early vendor preset disabling Aurora's `uupd` timer and alternative
+  rpm-ostree/bootc automatic update timers; build.sh applies the preset after
+  package installation. Manual updates and the user opt-in toggle remain
+  available. Changes are uncommitted.
+- Verified against the locally installed Aurora update recipe.
+  Real `systemctl --root` with actual timer units and inherited presets removed
+  pre-existing enablement links for all three timers in a temporary filesystem;
+  explicit enablement of `uupd.timer` succeeded.
+  Bash syntax and whitespace checks passed; host settings were not modified.
+- Next: build the OS container and a fresh disk payload, then check disabled
+  timers on first boot. Verify the ujust update opt-in control in that VM. No full image build/VM validation of these defaults
+  has been performed. ISO installation/full-bundle capacity checks remain pending.
+
+
 ## VM validation and application selection — 2026-10-17
 
 - User reports the downloaded QCOW2 boots; ripgrep and Okteta work, can be
@@ -15,7 +36,7 @@
   See [accepted selection](DECISIONS.md#explicit-application-selection--2026-10-17).
 - Changes require a new OS container and freshly prepared payload; the retained
   older payload does not contain this selection. Application-selection changes
-  are committed as `ec2cc8a`; full-bundle changes below remain uncommitted.
+  are committed as `ec2cc8a`; full-bundle changes below are committed as `6d17d8c`.
   No remote build performed in this step.
 - Local checks passed: manifest/manual installer, isolated payload shell, CyberChef,
   disk orchestration, retained-payload reuse, Bash syntax and whitespace review.

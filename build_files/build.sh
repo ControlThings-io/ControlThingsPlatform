@@ -49,6 +49,10 @@ done
 #### Example for enabling a System Unit File
 
 systemctl enable podman.socket
+# Apply the image's opt-in update policy after installing packages. Presets also
+# retain these defaults when systemd initializes a newly installed system.
+# Disable timers, rather than mask services, so manual updates and ujust work.
+systemctl preset uupd.timer rpm-ostreed-automatic.timer bootc-fetch-apply-updates.timer
 chmod 0755 /usr/libexec/controlthings-groups
 systemctl enable controlthings-groups.service
 chmod 0755 /usr/libexec/controlthings-tools

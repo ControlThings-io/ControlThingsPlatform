@@ -1,0 +1,5 @@
+# Sort before Aurora's 01-uupd.preset; the first matching rule wins.
+# Users may enable automatic updates later with ujust toggle-updates.
+disable uupd.timer
+disable rpm-ostreed-automatic.timer
+disable bootc-fetch-apply-updates.timer
