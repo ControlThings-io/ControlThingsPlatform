@@ -168,6 +168,17 @@ timers; it does not mask update services.
 Rebuild the OS container and prepare a fresh disk payload to include these
 defaults. After installation, check `systemctl is-enabled uupd.timer` reports
 `disabled`. Existing installations may retain local systemd enablement choices across OS updates.
+## Terminal MOTD default
+
+New users start with Aurora's terminal message of the day disabled. The image
+seeds `/etc/skel/.config/no-show-user-motd`, using Aurora's existing preference
+marker. Run `ujust toggle-user-motd` to enable or disable it afterward.
+Existing users keep their preference. The custom Macchina display in the
+ControlThings fish configuration remains enabled.
+
+Rebuild the OS container and prepare a fresh disk payload to include this default.
+Verify with a newly created user that Aurora's MOTD is absent, then enable it
+with `ujust toggle-user-motd` and open a new terminal to confirm it appears.
 
 ## ControlThings capture groups
 

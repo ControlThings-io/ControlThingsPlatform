@@ -21,6 +21,20 @@
   has been performed. ISO installation/full-bundle capacity checks remain pending.
 
 
+## New-user terminal MOTD default — 2026-10-17
+
+- Added Aurora's `.config/no-show-user-motd` marker to `/etc/skel` on `main`.
+  New users inherit the disabled MOTD preference and can enable it with
+  `ujust toggle-user-motd`. Existing users and the custom fish Macchina display
+  retain their settings. No automatic-update defaults were changed on main.
+- Validation: installed Aurora Bash/fish hooks suppressed MOTD with a copied
+  skeleton marker and resumed output after its removal in a temporary user home.
+  Whitespace review passed. Host settings were not modified.
+- Next: rebuild the OS container and prepare a fresh disk payload; verify a
+  fresh user's terminal and the ujust toggle in the VM. Changes are uncommitted;
+  no full image build or VM validation performed. Merge into the course branch
+  after submission when requested.
+
 ## VM validation and application selection — 2026-10-17
 
 - User reports the downloaded QCOW2 boots; ripgrep and Okteta work, can be
