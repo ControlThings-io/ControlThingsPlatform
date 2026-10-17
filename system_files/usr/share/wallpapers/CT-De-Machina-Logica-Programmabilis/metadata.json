@@ -1,0 +1,12 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "ControlThings Platform"
+            }
+        ],
+        "Id": "CT-De-Machina-Logica-Programmabilis",
+        "License": "Proprietary",
+        "Name": "De Machina Logica Programmabilis"
+    }
+}

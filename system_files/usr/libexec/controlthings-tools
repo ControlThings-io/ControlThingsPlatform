@@ -1,0 +1,198 @@
+#!/usr/bin/python3
+"""Disk-build list extraction and explicit installation on existing machines.
+
+The immutable Brewfile accepts simple brew/flatpak declarations, not Ruby code.
+`disk-selection` prints the selected container's Aurora defaults plus our tools
+as JSON; optional upstream bundles are never read. `brewfile` and `flatpak-ids`
+print only ControlThings entries. `install` runs as the Brew owner and uses
+pkexec for the fixed ControlThings Flatpak list. It never removes unlisted
+software. Nothing runs automatically at boot or during container updates.
+All subprocess failures propagate; explicit installation may download packages.
+"""
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import re
+import subprocess
+import sys
+import tempfile
+from typing import TypedDict
+
+MANIFEST = Path('/usr/share/ublue-os/homebrew/controlthings.Brewfile')
+AURORA_MANIFEST = MANIFEST.with_name('system-flatpaks.Brewfile')
+BREW = Path('/home/linuxbrew/.linuxbrew/bin/brew')
+HELPER = '/usr/libexec/controlthings-tools'
+
+
+class DiskSelection(TypedDict):
+    """Native candidate lists, filtered selection, omissions and manifest identities."""
+
+    architecture: str
+    profile: str
+    brew: list[str]
+    flatpak: list[str]
+    aurora_flatpaks: list[str]
+    controlthings_flatpaks: list[str]
+    omitted_aurora_flatpaks: list[str]
+    manifests_sha256: dict[str, str]
+
+
+def read_manifest(path: Path = MANIFEST, *, arch: str | None = None,
+                  require_both: bool = True) -> dict[str, list[str]]:
+    """Read unique declarations, honoring optional Flatpak `# arch=...` comments.
+
+    Architecture defaults to the running machine. Supported restrictions are
+    x86_64 and aarch64; builds are native, not cross-compilation. Other Ruby syntax
+    is rejected so build and explicit installation always use the same selections.
+    Set require_both=False for Aurora's Flatpak-only default manifest. Empty
+    manifests and duplicates within one manifest always fail.
+    """
+    arch = arch or platform.machine()
+    result: dict[str, list[str]] = {'brew': [], 'flatpak': []}
+    seen: set[tuple[str, str]] = set()
+    for number, line in enumerate(path.read_text().splitlines(), 1):
+        if not line.strip() or line.lstrip().startswith('#'):
+            continue
+        match = re.fullmatch(
+            r'\s*(brew|flatpak) "([A-Za-z0-9_.+-]+)"(?:\s+# arch=(x86_64|aarch64))?\s*', line)
+        if not match:
+            raise ValueError(f'{path}:{number}: expected a simple brew/flatpak declaration')
+        kind, name, restriction = match.groups()
+        if restriction and kind != 'flatpak':
+            raise ValueError(f'{path}:{number}: architecture restrictions apply only to Flatpaks')
+        if (kind, name) in seen:
+            raise ValueError(f'{path}:{number}: duplicate {name}')
+        seen.add((kind, name))
+        if restriction and restriction != arch:
+            continue
+        result[kind].append(name)
+    if not any(result.values()):
+        raise ValueError(f'{path}: no packages declared')
+    if require_both and not all(result.values()):
+        raise ValueError('The tool bundle must include both formulae and Flatpaks')
+    return result
+
+
+def disk_selection(*, arch: str | None = None, include_aurora: bool = True) -> DiskSelection:
+    """Merge Aurora's ISO defaults with ControlThings; never scan optional files.
+
+    Set include_aurora=False for ControlThings-only builds: validate and hash both
+    manifests but select only custom packages, with profile `controlthings`. Both files must exist in the selected OS. Preserve Aurora's order and append
+    our missing IDs once. Homebrew's inherited bootstrap is retained by the disk
+    builder; only ControlThings formulae are added, since Aurora's CLI collection
+    and DX Flatpak collection are opt-in ujust bundles. This does not change the
+    explicit ControlThings-only installer on existing machines.
+    """
+    arch = arch or platform.machine()
+    aurora = read_manifest(AURORA_MANIFEST, arch=arch, require_both=False)
+    if aurora['brew'] or not aurora['flatpak']:
+        raise ValueError(f'{AURORA_MANIFEST}: expected Aurora default Flatpak entries only')
+    custom = read_manifest(MANIFEST, arch=arch)
+    if not include_aurora:
+        aurora['flatpak'] = []
+    return {
+        'architecture': arch,
+        'profile': 'full' if include_aurora else 'controlthings',
+        'brew': custom['brew'],
+        'flatpak': list(dict.fromkeys([*aurora['flatpak'], *custom['flatpak']])),
+        'aurora_flatpaks': aurora['flatpak'],
+        'controlthings_flatpaks': custom['flatpak'],
+        'omitted_aurora_flatpaks': [],
+        'manifests_sha256': {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                             for path in (AURORA_MANIFEST, MANIFEST)},
+    }
+
+
+def available_disk_selection(selection: DiskSelection, available: set[str]) -> DiskSelection:
+    """Require every custom app; allow unavailable Aurora defaults only on ARM64.
+
+    Aurora's official default bundle targets AMD64. Use its available subset on
+    ARM64, recording omissions rather than assuming every upstream app has an
+    ARM build. A failed remote catalog command must abort before calling this
+    function. Explicit ControlThings requests are always required after their
+    manifest's architecture annotations have been applied.
+    """
+    missing = [app for app in selection['flatpak'] if app not in available]
+    required = [app for app in missing if app in selection['controlthings_flatpaks']]
+    if required or (missing and selection['architecture'] != 'aarch64'):
+        raise ValueError('Required Flatpaks absent from Flathub for '
+                         f"{selection['architecture']}: {', '.join(required or missing)}")
+    return {
+        **selection,
+        'flatpak': [app for app in selection['flatpak'] if app in available],
+        'omitted_aurora_flatpaks': missing,
+    }
+
+
+def run(*args: str) -> None:
+    """Run a command without a shell and require success."""
+    subprocess.run(args, check=True)
+
+
+def install_flatpaks(apps: list[str]) -> None:
+    """Explicitly install the fixed system app list, fetching missing packages."""
+    run('flatpak', 'remote-add', '--system', '--if-not-exists', 'flathub',
+        'https://flathub.org/repo/flathub.flatpakrepo')
+    run('flatpak', 'install', '--system', '--noninteractive', '--assumeyes',
+        'flathub', *apps)
+
+
+def install(brews: list[str]) -> None:
+    """Add missing formulae without upgrades, then authorize system Flatpaks."""
+    if os.geteuid() == 0:
+        raise RuntimeError('Run ujust install-controlthings-tools as your normal login user')
+    if not BREW.is_file():
+        raise RuntimeError('Homebrew is not initialized; check brew-setup.service first')
+    if BREW.resolve().stat().st_uid != os.geteuid():
+        raise RuntimeError('Run this command as the owner of the Homebrew installation')
+    with tempfile.TemporaryDirectory(prefix='controlthings-brew-') as directory:
+        brewfile = Path(directory) / 'Brewfile'
+        brewfile.write_text(''.join(f'brew "{name}"\n' for name in brews))
+        run(str(BREW), 'bundle', 'install', '--no-upgrade', f'--file={brewfile}')
+    run('pkexec', HELPER, 'install-flatpaks')
+
+
+def main() -> None:
+    """Dispatch the fixed CLI; only explicit system Flatpak installation is root."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('action', choices=(
+        'brewfile', 'flatpak-ids', 'disk-selection', 'install-flatpaks', 'install'))
+    parser.add_argument('--available-flatpaks', type=Path,
+                        help='Native remote catalog; only valid with disk-selection')
+    parser.add_argument('--exclude-aurora-defaults', action='store_true',
+                        help='Select custom entries without Aurora defaults')
+    args = parser.parse_args()
+    if args.exclude_aurora_defaults and args.action != 'disk-selection':
+        parser.error('--exclude-aurora-defaults requires disk-selection')
+    if args.available_flatpaks and args.action != 'disk-selection':
+        parser.error('--available-flatpaks requires disk-selection')
+    if args.action == 'disk-selection':
+        selection = disk_selection(include_aurora=not args.exclude_aurora_defaults)
+        if args.available_flatpaks:
+            available = {line.strip() for line in args.available_flatpaks.read_text().splitlines()
+                         if line.strip()}
+            selection = available_disk_selection(selection, available)
+            for app in selection['omitted_aurora_flatpaks']:
+                print(f"Omitting unavailable Aurora default on {selection['architecture']}: {app}",
+                      file=sys.stderr)
+        print(json.dumps(selection, indent=2))
+        return
+    manifest = read_manifest()
+    if args.action == 'brewfile':
+        print(''.join(f'brew "{name}"\n' for name in manifest['brew']), end='')
+    elif args.action == 'flatpak-ids':
+        print('\n'.join(manifest['flatpak']))
+    elif args.action == 'install':
+        install(manifest['brew'])
+    else:
+        if os.geteuid() != 0:
+            raise RuntimeError('This operation requires root')
+        install_flatpaks(manifest['flatpak'])
+
+
+if __name__ == '__main__':
+    main()

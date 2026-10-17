@@ -122,6 +122,199 @@ This should queue your image for the next reboot, which you can do immediately a
 
 # Repository Contents
 
+## Default desktop wallpaper
+
+New users start with **De Machina Logica Programmabilis** on Aurora's KDE
+desktop. Existing desktops keep their selected wallpaper. New desktops created
+for additional monitors or activities also use this default while an Aurora
+global theme is selected.
+
+The wallpaper images and metadata live in
+[`system_files/usr/share/wallpapers/CT-De-Machina-Logica-Programmabilis/`](system_files/usr/share/wallpapers/CT-De-Machina-Logica-Programmabilis/).
+[`build_files/plasma-desktop.js`](build_files/plasma-desktop.js) selects that
+package. To choose another bundled wallpaper, change the package directory in
+its `Image` setting, keeping the absolute `/usr/share/wallpapers/` path.
+[`build_files/build.sh`](build_files/build.sh) installs this setup script into
+Aurora's dark and light global themes when building the image.
+
+Rebuild and deploy the image, then test with a fresh user profile. Verify that
+the wallpaper appears, a user-selected replacement survives logout/login, and
+an existing user's wallpaper stays unchanged. This setting controls desktop
+wallpaper; login-screen and installer branding are configured separately.
+
+## Default lock-screen background
+
+The lock screen defaults to **Aquila Aurea Machina** through
+[`system_files/usr/share/kde-settings/kde-profile/default/xdg/kscreenlockerrc`](system_files/usr/share/kde-settings/kde-profile/default/xdg/kscreenlockerrc).
+To select another bundled wallpaper, change both `Image` and `PreviewImage` to
+its package directory using a `file:///usr/share/wallpapers/` URL.
+The existing build script copies this file into Aurora's system configuration.
+
+Users who have saved their own lock-screen background keep that choice. Existing
+users who still inherit the system default may also see the new background.
+After deploying a rebuilt image, lock a fresh user's session to check it, then
+choose another background in Plasma's Screen Locking settings and verify that
+the choice survives another lock and a logout/login. This does not change the
+login screen shown before signing in, or locking and password requirements.
+
+## ControlThings capture groups
+
+ControlThings follows Aurora's one-time startup setup pattern for the
+`wireshark` and `usbmon` groups. On the first boot where `wheel` has members,
+`controlthings-groups.service` adds all those administrator accounts to both
+capture groups, preserving their primary and other supplementary groups.
+Existing administrator accounts are included when first deploying this feature.
+
+The shared [controlthings-groups script](system_files/usr/libexec/controlthings-groups)
+records its successful setup version in `/etc/ublue/controlthings-groups` and
+skips later automatic runs at that version. Increment `GROUP_SETUP_VER` when a
+future policy change should reapply setup. An empty `wheel` group or failed setup
+does not record the new version; failures retry through systemd, and empty membership
+is checked again at the next boot.
+
+For accounts created later, or for a non-administrator login account, run this as
+the user whose memberships should be updated:
+
+```bash
+ujust controlthings-groups
+```
+
+Authorize the request, then log out completely and log back in. The
+[recipe](system_files/usr/share/ublue-os/just/60-custom.just) calls the same script
+with `--user USER`, bypassing the startup marker without changing it. Check the
+result with `id -nG` in a new session. Administrators can also explicitly run
+`sudo /usr/libexec/controlthings-groups --user USERNAME` for another local account.
+
+`dialout` remains available through Aurora's existing `ujust dx-group` command;
+ControlThings does not manage it. Capture/device permissions still depend on
+Wireshark's package configuration and the available hardware. See
+[validation status](docs/STATUS.md#controlthings-capture-groups--2026-10-15) and
+[decision](docs/DECISIONS.md#controlthings-capture-groups--2026-10-15).
+
+## CyberChef offline application
+
+CyberChef is bundled at `/usr/share/cyberchef/` and appears as **CyberChef** in
+the Utilities and Development menus. Its launcher uses the bundled Firefox RPM to open
+`file:///usr/share/cyberchef/index.html`. No webserver or runtime download is required.
+The bundled upstream icon is installed in the standard hicolor icon theme.
+
+Each `just build` resolves the latest stable
+[official CyberChef release](https://github.com/gchq/CyberChef/releases/latest),
+downloads its offline ZIP, and verifies the asset's published SHA-256. A separate
+Containerfile step refreshes CyberChef without invalidating the package-install
+step. Direct Podman builds should pass a fresh
+`--build-arg CYBERCHEF_BUILD_EPOCH="$(date -u +%s%N)"` to request the same refresh
+behavior; otherwise normal layer caching applies.
+
+The complete ZIP is installed, preserving assets and workers. A stable
+`index.html` symlink points to the versioned HTML file. The matching upstream
+license is included as `LICENSE`, and `release.json` records the version, asset,
+download URL, and SHA-256. Installed timestamps use the release publication time
+so reinstalling the same release does not introduce timestamp-only changes.
+No downloaded ZIP is kept in the image or repository.
+
+[install-cyberchef.py](build_files/install-cyberchef.py) implements the download
+and extraction. GitHub/network errors, missing checksum metadata, checksum
+mismatches, unsafe archive paths, and unexpected HTML/icon layouts fail the build.
+CyberChef updates arrive through distro image updates, rather than independently
+updating this read-only installation. Since latest is resolved during the build,
+repeat builds may select newer releases.
+
+After deploying, disconnect networking, open the menu launcher, and check Base64
+encoding/decoding, a worker-based operation such as SHA-256, and file input.
+Verify the icon and the browser used. See
+[STATUS.md](docs/STATUS.md#cyberchef-offline-build--2026-10-15) for validation gaps
+and [DECISIONS.md](docs/DECISIONS.md#cyberchef-offline-build--2026-10-15) for rationale.
+
+## Bundled Homebrew and Flatpak tools
+
+The full custom bundle is enabled. Aurora's system Flatpak selection remains
+excluded through `--exclude-aurora-defaults`; only explicitly selected apps and
+their dependencies are prepared. The inherited Homebrew bootstrap is retained.
+The manual `ujust install-controlthings-tools` command follows the same Brewfile
+and does not remove applications already installed.
+
+The disk workflow defaults to `format=qcow2`; `iso` and `both` remain explicit
+choices. New bundles record `tools.profile=controlthings` and use standard
+filenames without a `-smoke` suffix. Reusing an older smoke payload retains its
+original profile and suffix.
+
+Publish a container containing the changed manifest and helper before dispatching
+the disk workflow with its dated image tag: the disk job reads these files from
+the selected container, not the workflow checkout. Prepare a fresh payload for
+this expanded bundle; an older retained payload still contains its original apps.
+Full-size capacity and offline application launches need validation, starting
+with AMD64 QCOW2. The successful payload can then be reused for ISO assembly.
+Per-user Python tool provisioning remains deferred.
+
+The [ControlThings Brewfile](system_files/usr/share/ublue-os/homebrew/controlthings.Brewfile)
+defines the apps prepared **only during manual disk-image builds**. Normal
+container builds ship the list and manual installer; they do not download or
+bundle these applications. Aurora's inherited Homebrew bootstrap stays unchanged.
+
+Both disk formats install only the Flatpaks selected in ControlThings' Brewfile,
+including Bazaar. Aurora's `system-flatpaks.Brewfile` remains excluded, as do
+its optional CLI, fonts and DX bundles. Firefox is installed as an RPM in the
+OS image and opens the bundled CyberChef application.
+
+The list includes 29 Homebrew formulae, including `eza`, `gping`, `git-delta`
+(the `delta` command), `libbladerf`, and `librtlsdr`, plus Gqrx, Obsidian, ImHex,
+Okteta, Bazaar, and ZAP. ZAP is AMD64-only because Flathub has no ARM64 build; ARM64 gets
+the other five apps. Use simple `brew "name"` and `flatpak "application.ID"`
+declarations. The optional `# arch=x86_64` Flatpak annotation restricts an app
+to AMD64.
+
+The build checks the native Flathub catalog. Missing selected apps or catalog
+errors fail the build. The ZAP architecture annotation excludes it on ARM64.
+
+The manual disk workflow starts from the selected published container digest
+and its shipped manifest. One preparation job per run/architecture prepares Homebrew under
+`/var/home/linuxbrew/.linuxbrew` and system Flatpaks under `/var/lib/flatpak`,
+including dependencies and extra-data processing. Both ISO and QCOW2 install
+these populated stores; their apps need no first-boot download or custom seed
+service. Builds require internet access and extra working space. Preparation
+retains its image in the separate GHCR `controlthingsplatform-disk-payload`
+package, under a unique `run-RUNID-ATTEMPT-ARCH` tag. Both formats pull its exact
+digest; installed systems follow the original OS channel. Cache images are
+installer inputs, not supported targets for `bootc switch`.
+Before disk assembly, the script removes only its own labelled, dangling
+tools-builder images to reclaim duplicate app stores. It reports storage usage
+around that cleanup; full builds still require substantial working space.
+
+Publish a container containing the manifest/helper before using this disk path;
+older container tags without them fail with an explanatory error. The legacy
+local `just build-iso`/`just build-qcow2` recipes do not populate these tools;
+use the manual GitHub disk workflow or `scripts/build-disk.py` for bundled images.
+
+Normal container updates preserve installed Homebrew and Flatpak stores and do
+not add newly listed apps. To add the current image's tools to an existing
+system, run as the Homebrew owner (normally the first login account):
+
+```bash
+ujust install-controlthings-tools
+```
+
+This installs missing Homebrew formulae without upgrading existing ones, then
+asks for administrator authorization to install missing system Flatpaks. It can
+download missing packages and does not remove other tools. Continue using
+Homebrew, Flatpak, or Aurora's update tooling for application updates. Installing
+Starship and Zoxide does not automatically change shell configuration.
+
+Disk artifact source metadata records the original OS digest, the temporary
+payload's local image ID, both manifest checksums, selected package IDs, omitted
+ARM64 defaults, Homebrew versions and Flatpak commits. The same initial metadata is installed at
+`/var/lib/controlthings/tools/installed.json`; it describes disk provisioning,
+not later application updates. QCOW2 uses a 64 GiB root minimum for the populated
+stores; measure remaining space after first boot.
+
+The manual `ujust install-controlthings-tools` command installs ControlThings'
+list only; it does not automatically install Aurora's default or optional bundles.
+
+Gqrx's former preinstall declaration was removed with the user's approval.
+The unpublished development image that previously tracked it may remove it once
+during preinstall reconciliation; reinstall with the command above afterward.
+See [current validation](docs/STATUS.md) and [accepted decisions](docs/DECISIONS.md).
+
 ## Containerfile
 
 The [Containerfile](./Containerfile) defines the operations used to customize the selected image.This file is the entrypoint for your image build, and works exactly like a regular podman Containerfile. For reference, please see the [Podman Documentation](https://docs.podman.io/en/latest/Introduction.html).
@@ -130,31 +323,136 @@ The [Containerfile](./Containerfile) defines the operations used to customize th
 
 The [build.sh](./build_files/build.sh) file is called from your Containerfile. It is the best place to install new packages or make any other customization to your system. There are customization examples contained within it for your perusal.
 
+Build-time DNF installation disables repository usage counting (`countme`). At
+the end of the script, per-repository counting files inherited from the base
+image are removed so small bookkeeping changes do not force large layer
+downloads on updates. Installed-system repository settings remain inherited.
+Use the same counting override for additional build-time DNF commands and keep
+cleanup after all package operations. See the
+[decision](docs/DECISIONS.md#build-time-dnf-counting-state--2026-10-15) and
+[validation status](docs/STATUS.md#build-time-dnf-counting-cleanup--2026-10-15).
+
 ## build.yml
 
 The [build.yml](./.github/workflows/build.yml) Github Actions workflow creates your custom OCI image and publishes it to the Github Container Registry (GHCR). By default, the image name will match the Github repository name.
 
+Scheduled container builds run weekly on Saturdays at 23:00 UTC. GitHub may
+delay scheduled runs. Push, pull-request, and manual triggers also remain active.
+
 # Building Disk Images
 
-This template provides an out of the box workflow for creating disk images (ISO, qcow, raw) for your custom OCI image which can be used to directly install onto your machines.
+To compare the compressed container layer sizes of two published tags without
+downloading their layers, run:
 
-This template provides a way to upload the disk images that is generated from the workflow to a S3 bucket. The disk images will also be available as an artifact from the job, if you wish to use an alternate provider. To upload to S3 we use [rclone](https://rclone.org/) which is able to use [many S3 providers](https://rclone.org/s3/).
+```bash
+./scripts/compare-image-sizes.sh OLD_TAG NEW_TAG
+```
 
-## Setting Up ISO Builds
+This requires `skopeo`, `jq`, and `awk`. It queries the ControlThings GHCR
+repository for the host platform and reports both totals in GiB and the
+new-minus-old difference in MiB. These totals are not installed disk usage or
+the amount downloaded during an update. Registry access uses Skopeo's existing
+credentials when authentication is required.
 
-The [build-disk.yml](./.github/workflows/build-disk.yml) Github Actions workflow creates a disk image from your OCI image by utilizing the [bootc-image-builder](https://osbuild.org/docs/bootc/). In order to use this workflow you must complete the following steps:
+The [Build disk images workflow](.github/workflows/build-disk.yml) runs manually
+and builds an interactive ISO installer and a QCOW2 VM disk for the selected
+**platform**: `amd64` (default) or `arm64`. Builds use native Ubuntu runners.
+Open **Actions → Build disk images → Run workflow**, select the platform and
+**format** (`qcow2` by default, `iso`, or `both`), and supply a
+published channel (`latest`, `ics410_l01`, or `ics410-l01` if published with that
+spelling), or a dated tag such as `latest-20261015-5118339`. Channel names retain
+their exact spelling; hyphens and underscores are not aliases.
 
-1. Modify `disk_config/iso.toml` to point to your custom container image before generating an ISO image.
-2. If you changed your image name from the default in `build.yml` then in the `build-disk.yml` file edit the `IMAGE_REGISTRY`, `IMAGE_NAME` and `DEFAULT_TAG` environment variables with the correct values. If you did not make changes, skip this step.
-3. Finally, if you want to upload your disk images to S3 then you will need to add your S3 configuration to the repository's Action secrets. This can be found by going to your repository settings, under `Secrets and Variables` -> `Actions`. You will need to add the following
-  - `S3_PROVIDER` - Must match one of the values from the [supported list](https://rclone.org/s3/)
-  - `S3_BUCKET_NAME` - Your unique bucket name
-  - `S3_ACCESS_KEY_ID` - It is recommended that you make a separate key just for this workflow
-  - `S3_SECRET_ACCESS_KEY` - See above.
-  - `S3_REGION` - The region your bucket lives in. If you do not know then set this value to `auto`.
-  - `S3_ENDPOINT` - This value will be specific to the bucket as well.
+Both format jobs use one prepared application payload for the selected architecture. The filename date
+and hash come from the source container version label, never the workflow's
+checkout or the disk generation date. For example:
 
-Once the workflow is done, you'll find the disk images either in your S3 bucket or as part of the summary under `Artifacts` after the workflow is completed.
+- `controlthingsplatform-latest-20261015-5118339-amd64-installer.iso`
+- `controlthingsplatform-latest-20261015-5118339-amd64.qcow2`
+
+For a fresh payload, leave **payload_ref** blank. The preparation job publishes
+the payload before disk assembly, writes its source tag and digest reference to
+the workflow summary, and uploads a small `disk-payload-...` descriptor artifact.
+Final disk metadata includes that reference and exact artifact bytes. Registry
+layer bytes are reported separately; they are not installed size or runner peak
+storage usage.
+
+For an assembly retry, use GitHub's **Re-run failed jobs** to reuse successful
+preparation. For another format or a later workflow revision, dispatch a new run
+with the same dated **image_tag** and paste the summary's full
+`ghcr.io/controlthings-io/controlthingsplatform-disk-payload@sha256:...` into
+**payload_ref**. This skips package installation and downloads the retained
+payload directly on the GitHub runner. Changes to the source digest, architecture,
+channel, or preparation recipe require fresh preparation; mismatches fail rather
+than silently reinstalling apps. Assembly-only fixes can reuse the payload.
+
+The preparation job has `packages: write`; assembly has read-only package access.
+Both log into GHCR using the workflow token, including for a private cache package.
+The new package is linked to this repository through its source label. Organization
+package policies must allow creation/access; that permission is verified by CI's
+first push/pull. There is no automatic cache deletion yet: retain referenced
+payload versions while retries are needed and remove obsolete cache versions
+through GitHub Packages when finished. Deletion prevents later reuse.
+
+Workflow-only changes can use an existing compatible OS tag without waiting for
+a new container build. Manifest/helper changes require a new published OS image.
+Dependency-image availability is checked before application preparation; this
+preflight does not prove adequate full-size runner capacity.
+
+ARM64 outputs use `arm64` in place of `amd64`. The selected tag must publish a
+matching container architecture; disk generation cannot convert an AMD64
+container into ARM64. The container workflow currently builds AMD64 only, and
+the inspected `latest` tag has no ARM64 payload. Publish an ARM64 source before
+using that platform; the resolver fails early when it is missing.
+
+Each download includes a `.sha256` file, `.source.json` metadata, and an osbuild
+manifest. Verify a downloaded image with `sha256sum -c FILENAME.sha256`.
+Metadata records the original OS digest, disk-only payload image ID, tool versions,
+requested tag, update reference, builder, and workflow run. Same-day container
+rebuilds can reuse date/hash tags; the recorded identities distinguish their
+contents. Artifact names also contain the
+workflow run and attempt so the two formats and repeated runs remain separate.
+
+Installed systems follow their source channel: `latest` updates to `latest`,
+`ics410_l01` updates to `ics410_l01`, and `ics410-l01` updates to `ics410-l01`.
+Selecting a dated tag fixes the OS source and tool list; app versions resolve at
+preparation time. Reusing a payload also freezes its installed app versions. The installed system follows that tag's channel for future
+updates. The ISO embeds the prepared disk-only payload and
+Anaconda installs from local container storage. Offline installation and first
+login still require VM validation.
+
+## Disk builder and configuration
+
+CI uses the pinned [image-builder CLI](https://github.com/osbuild/image-builder)
+container directly. The deprecated bootc-image-builder action cannot express the
+new generic installer configuration. The ISO uses `bootc-generic-iso` with a
+separate Fedora 44 Anaconda environment defined in
+[disk_config/installer/Containerfile](disk_config/installer/Containerfile), based
+on the [upstream generic ISO example](https://osbuild.org/docs/developer-guide/projects/image-builder/advanced/bootc/isos/).
+Its kickstart explicitly selects the embedded payload and channel update
+reference. The installer environment does not become the installed OS.
+
+QCOW2 uses the new CLI's `--image-size "64 GiB"` root minimum and Btrfs default,
+allowing space for the preinstalled Homebrew and Flatpak stores. The local legacy
+disk configuration also uses a 64 GiB root minimum.
+The existing `just build-iso`/`just build-qcow2` recipes and
+`disk_config/iso.toml`/`disk_config/disk.toml` still use the legacy local builder;
+this migration covers the GitHub disk workflow only.
+
+GitHub artifacts are always uploaded. Optionally select **Also upload to S3**;
+configure these repository Actions secrets:
+
+- `S3_PROVIDER`: an [rclone S3 provider](https://rclone.org/s3/).
+- `S3_BUCKET_NAME`: destination bucket.
+- `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`: credentials for that bucket.
+- `S3_REGION`: provider region, or `auto` where supported.
+- `S3_ENDPOINT`: provider endpoint.
+
+S3 files go under `SOURCE_TAG/RUN_ID-ATTEMPT/ARCHITECTURE/FORMAT/` to keep runs and formats
+separate. Build failures stop image upload. See
+[STATUS.md](docs/STATUS.md#disk-workflow-migration--2026-10-15) for validation gaps
+and [DECISIONS.md](docs/DECISIONS.md#disk-workflow-and-update-channels--2026-10-15)
+for accepted workflow choices.
 
 # Artifacthub
 
@@ -196,28 +494,44 @@ Arguments:
 - `$tag`: The tag for the image (default: `$default_tag`).
 
 ### Rechunking
-We can flatten the layers of container images to make sure there isn't a single huge layer when your image gets published.
-This does not make your image faster to download, just provides better resumability.
-
-#### `just ostree-rechunk`
-Rechunks the existing Image with [rpm-ostree](https://coreos.github.io/rpm-ostree/build-chunked-oci/)
-
-```bash
-just ostree-rechunk $target_image $tag
-```
 
 #### `just rechunk`
-Rechunks the existing Image with [chunkah](https://github.com/coreos/chunkah), this is probably gonna be the default here at some point, try it out, it's cool.
+
+The container workflow uses [Chunkah](https://github.com/coreos/chunkah), matching
+Aurora's approach. It reorganizes the finished filesystem into up to 256 layers
+so unchanged layers can be reused during updates. It preserves the selected
+image's configuration, removes embedded OSTree data and stale OSTree labels,
+imports the temporary OCI output, and retags the result under the same name/tag.
+The recipe then runs `bootc container lint` on the result.
 
 ```bash
 just rechunk $target_image $tag
 ```
 
+Build and rechunk using the same user's Podman storage. The builder image is
+digest-pinned in `Justfile`, with updates managed by Renovate. Temporary files
+are cleaned on success or failure. Changing layer layouts can require a larger
+first update; subsequent download savings need measurement. Rechunking does not
+eliminate changes inside RPM/DNF databases.
+
+#### `just ostree-rechunk`
+
+The previous [rpm-ostree rechunker](https://coreos.github.io/rpm-ostree/build-chunked-oci/)
+remains available for explicit comparison or rollback builds; CI uses Chunkah.
+
+```bash
+sudo just ostree-rechunk $target_image $tag
+```
+
+See [DECISIONS.md](docs/DECISIONS.md#chunkah-rechunking--2026-10-15) for rationale
+and [STATUS.md](docs/STATUS.md#chunkah-rechunking--2026-10-15) for validation gaps.
+
 ### Switching to the locally built image for testing
 
 The image has to be in the containers-storage owned by root, to be able to rebase to it, see the `_rootful_load_image` recipe.
 
-`sudo just build` and `sudo just ostree-rechunk` builds directly as root and allows you to skip the transfer to the root containers-storage.
+`sudo just build` and `sudo just rechunk` use root's container storage directly,
+allowing you to skip the transfer from user storage.
 
 You can rebase to all the images that are in your containers-storage:
 

@@ -1,0 +1,61 @@
+#!/bin/bash
+# Aurora-style group setup. Run as root with no arguments to add all current
+# wheel members once per GROUP_SETUP_VER; record success in /etc/ublue.
+# --user USER adds one local account regardless of the marker, without changing
+# it. Preserve existing memberships. Failures leave automatic setup retryable;
+# earlier successful additions may remain. Empty wheel membership writes no
+# marker, allowing setup after the initial administrator account is created.
+set -euo pipefail
+
+GROUP_SETUP_VER=1
+GROUP_SETUP_VER_FILE=/etc/ublue/controlthings-groups
+
+if (( EUID != 0 )); then
+    echo "Run controlthings-groups as root or use ujust controlthings-groups." >&2
+    exit 1
+fi
+
+case "$#:${1:-}" in
+    0:)
+        if [[ -f $GROUP_SETUP_VER_FILE ]] &&
+            [[ $(cat "$GROUP_SETUP_VER_FILE") == "$GROUP_SETUP_VER" ]]; then
+            echo "ControlThings group setup has already run."
+            exit 0
+        fi
+        IFS=, read -r -a users <<< "$(getent group wheel | cut -d: -f4)"
+        if (( ${#users[@]} == 0 )); then
+            echo "No wheel users yet; group setup will retry at the next boot."
+            exit 0
+        fi
+        ;;
+    2:--user)
+        getent -s files -- passwd "$2" > /dev/null
+        users=("$2")
+        ;;
+    *)
+        echo "Usage: controlthings-groups [--user USER]" >&2
+        exit 2
+        ;;
+esac
+
+# Like Aurora, give vendor-only groups local entries so usermod can update them.
+# Wireshark normally supplies these groups; create them if not already present.
+for group in wireshark usbmon; do
+    if ! grep -q "^${group}:" /etc/group; then
+        if entry=$(getent group "$group"); then
+            printf '%s\n' "$entry" >> /etc/group
+        else
+            groupadd --system "$group"
+        fi
+    fi
+done
+
+for user in "${users[@]}"; do
+    usermod --append --groups wireshark,usbmon -- "$user"
+    echo "Added $user to wireshark and usbmon."
+done
+
+if (( $# == 0 )); then
+    mkdir -p /etc/ublue
+    printf '%s\n' "$GROUP_SETUP_VER" > "$GROUP_SETUP_VER_FILE"
+fi

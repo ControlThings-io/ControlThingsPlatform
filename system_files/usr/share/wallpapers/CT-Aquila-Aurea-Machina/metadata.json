@@ -1,0 +1,12 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "ControlThings Platform"
+            }
+        ],
+        "Id": "CT-Aquila-Aurea-Machina",
+        "License": "Proprietary",
+        "Name": "Aquila Aurea Machina"
+    }
+}
