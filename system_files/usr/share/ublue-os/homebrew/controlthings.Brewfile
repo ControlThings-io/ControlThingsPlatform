@@ -28,7 +28,6 @@ brew "ripgrep"
 # brew "doggo"
 # brew "gping"
 # brew "ent"
-# brew "ettercap"
 # brew "bettercap"
 # brew "rtl_433"
 
