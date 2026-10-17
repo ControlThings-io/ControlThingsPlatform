@@ -1,5 +1,14 @@
 # Decisions
 
+## New-user terminal MOTD default — 2026-10-17
+
+Accepted on `main`: disable Aurora's terminal MOTD for newly created users by
+seeding `.config/no-show-user-motd` through `/etc/skel`. Use Aurora's existing
+preference marker so `ujust toggle-user-motd` remains available without replacing
+shell hooks. Existing users retain their preference; the custom fish Macchina
+display remains enabled. This change can be merged into the course branch.
+See [usage](../README.md#terminal-motd-default) and [status](STATUS.md).
+
 ## Explicit application selection — 2026-10-17
 
 Accepted: keep Aurora system Flatpaks excluded from disk preparation permanently.

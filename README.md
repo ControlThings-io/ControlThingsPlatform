@@ -157,6 +157,18 @@ choose another background in Plasma's Screen Locking settings and verify that
 the choice survives another lock and a logout/login. This does not change the
 login screen shown before signing in, or locking and password requirements.
 
+## Terminal MOTD default
+
+New users start with Aurora's terminal message of the day disabled. The image
+seeds `/etc/skel/.config/no-show-user-motd`, using Aurora's existing preference
+marker. Run `ujust toggle-user-motd` to enable or disable it afterward.
+Existing users keep their preference. The custom Macchina display in the
+ControlThings fish configuration remains enabled.
+
+Rebuild the OS container and prepare a fresh disk payload to include this default.
+Verify with a newly created user that Aurora's MOTD is absent, then enable it
+with `ujust toggle-user-motd` and open a new terminal to confirm it appears.
+
 ## ControlThings capture groups
 
 ControlThings follows Aurora's one-time startup setup pattern for the
