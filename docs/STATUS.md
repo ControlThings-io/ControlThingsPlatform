@@ -1,23 +1,34 @@
 # Current status
 
-## ISO installer pin refresh — 2026-10-16
+## VM validation and application selection — 2026-10-17
 
-- Replaced the unavailable Fedora 44 installer index with
-  `sha256:9db34195bc0b6be43e17c20ca840be5bc153093c94b62f6792a76fb199eeaced`.
-  Registry metadata identifies version `44.20261016.0`; verified Linux AMD64 and
-  ARM64 manifests. The old digest still returned `manifest unknown`.
-- Real AMD64 ISO preflight passed against the retained descriptor from successful
-  [QCOW2 run 38990955138](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/38990955138).
-  Disk orchestration and retained-payload regression checks passed, as did
-  whitespace review. Preparation recipe hash still matches the retained payload.
-  Checks fetched only registry metadata; no full installer download/build or VM
-  validation was performed. The pin update is uncommitted; user will run ISO CI.
-- After commit/push, dispatch AMD64 / ISO with source tag
-  `latest-20261017-59659b7` and payload reference:
-  `ghcr.io/controlthings-io/controlthingsplatform-disk-payload@sha256:066031ab6dcddf2db1980e7cf48d3d78bea2d4f2e004ec9f7d7ec5fd0c7cc4c1`.
-  No new OS container build is required. Keep this dated source even if a newer
-  OS tag publishes; reuse validates its original source digest.
-
+- User reports the downloaded QCOW2 boots; ripgrep and Okteta work, can be
+  updated/removed by the first user through normal Aurora tooling, and persist
+  through reboot. CyberChef and the user's /etc/skel files also work.
+  User additionally confirms offline cold boot and application persistence
+  across an OS update. These are user-reported VM results, not local automated checks.
+- User reports ISO build success; download and installation testing are pending.
+  The refreshed installer pin is committed as `44b5d0c`; prior instructions to
+  submit that pin and dispatch ISO are superseded by this result.
+- Keep Aurora defaults excluded. Added Bazaar to the reduced custom Brewfile,
+  Firefox to RPM installation, and Firefox as CyberChef's explicit launcher.
+  See [accepted selection](DECISIONS.md#explicit-application-selection--2026-10-17).
+- Changes require a new OS container and freshly prepared payload; the retained
+  older payload does not contain this selection. Leave full-bundle expansion
+  and uv provisioning pending. No submission or remote build performed here.
+- Local checks passed: manifest/manual installer, isolated payload shell, CyberChef,
+  disk orchestration, retained-payload reuse, Bash syntax and whitespace review.
+  Corrected a stale full-list count after the already committed ettercap removal.
+  No full image build or new VM validation was performed.
+- Pending with the user: ISO installation after download, and Bazaar's first-login
+  icon plus Firefox/CyberChef launching in an image containing the new changes.
+  Full-size capacity remains unvalidated. The user's skeleton shortcut changes
+  are now committed separately as `2181603`; preserve that work.
+- Proposed next scope (not yet implemented): restore the selected full custom
+  Brewfile, keep Aurora defaults excluded, and replace smoke-specific naming and
+  profile metadata. Build AMD64 QCOW2 with a fresh prepared payload, validate
+  capacity and offline app launches, then reuse that payload for ISO assembly.
+  Keep per-user uv provisioning separate from this bundle expansion.
 
 ## Retained payload implementation — 2026-10-16
 

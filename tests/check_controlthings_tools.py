@@ -23,7 +23,7 @@ tools = module_from_spec(spec)
 loader.exec_module(tools)
 manifest_path = ROOT / 'system_files/usr/share/ublue-os/homebrew/controlthings.Brewfile'
 manifest = tools.read_manifest(manifest_path, arch='x86_64')
-assert manifest == {'brew': ['ripgrep'], 'flatpak': ['org.kde.okteta']}
+assert manifest == {'brew': ['ripgrep'], 'flatpak': ['org.kde.okteta', 'io.github.kolunmi.Bazaar']}
 assert tools.read_manifest(manifest_path, arch='aarch64') == manifest
 # Keep testing the full preserved list, including architecture restrictions.
 full_manifest_text = '\n'.join(
@@ -46,9 +46,9 @@ with tempfile.TemporaryDirectory(prefix='ct-tools-tests-') as temporary:
 
     full_manifest = Path(temporary) / 'controlthings.Brewfile'
     full_manifest.write_text(full_manifest_text)
-    assert len(tools.read_manifest(full_manifest)['brew']) == 30
-    assert len(tools.read_manifest(full_manifest, arch='x86_64')['flatpak']) == 5
-    assert len(tools.read_manifest(full_manifest, arch='aarch64')['flatpak']) == 4
+    assert len(tools.read_manifest(full_manifest)['brew']) == 29
+    assert len(tools.read_manifest(full_manifest, arch='x86_64')['flatpak']) == 6
+    assert len(tools.read_manifest(full_manifest, arch='aarch64')['flatpak']) == 5
     # Upstream defaults come only from the selected container's default list.
     # Duplicate IDs across lists are intentional and must install only once.
     upstream = Path(temporary) / 'system-flatpaks.Brewfile'
@@ -68,11 +68,11 @@ with tempfile.TemporaryDirectory(prefix='ct-tools-tests-') as temporary:
         assert selected['manifests_sha256']['system-flatpaks.Brewfile'] == hashlib.sha256(upstream.read_bytes()).hexdigest()
         with patch.object(tools, 'MANIFEST', manifest_path):
             smoke = tools.disk_selection(arch='x86_64', include_aurora=False)
-            assert smoke['flatpak'] == ['org.kde.okteta']
+            assert smoke['flatpak'] == ['org.kde.okteta', 'io.github.kolunmi.Bazaar']
             assert smoke['brew'] == ['ripgrep']
             assert smoke['aurora_flatpaks'] == []
             assert smoke['profile'] == 'smoke'
-            assert tools.available_disk_selection(smoke, {'org.kde.okteta'}) == smoke
+            assert tools.available_disk_selection(smoke, {'org.kde.okteta', 'io.github.kolunmi.Bazaar'}) == smoke
         assert selected['profile'] == 'full'
         available = set(selected['flatpak'])
         assert tools.available_disk_selection(selected, available)['omitted_aurora_flatpaks'] == []

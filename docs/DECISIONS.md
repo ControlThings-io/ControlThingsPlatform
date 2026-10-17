@@ -1,5 +1,16 @@
 # Decisions
 
+## Explicit application selection — 2026-10-17
+
+Accepted: keep Aurora system Flatpaks excluded from disk preparation permanently.
+The user will select apps in the ControlThings Brewfile. Include Bazaar there
+now so its app and icon are deployed before first boot; the user observed a
+missing icon until reboot with Aurora's background download. Install Firefox
+as an RPM and launch CyberChef explicitly with Firefox. This supersedes the
+2026-10-15 default-list merge and xdg-open choices below. Keep other full-bundle
+entries commented until smoke ISO validation and full-size capacity checks.
+
+
 ## Retained disk application payload — 2026-10-16
 
 Accepted: prepare applications once per architecture and retain the result before

@@ -194,9 +194,8 @@ Wireshark's package configuration and the available hardware. See
 ## CyberChef offline application
 
 CyberChef is bundled at `/usr/share/cyberchef/` and appears as **CyberChef** in
-the Utilities and Development menus. Its launcher uses `xdg-open` to open
-`file:///usr/share/cyberchef/index.html` in the configured HTML application,
-normally the default browser. No webserver or runtime download is required.
+the Utilities and Development menus. Its launcher uses the bundled Firefox RPM to open
+`file:///usr/share/cyberchef/index.html`. No webserver or runtime download is required.
 The bundled upstream icon is installed in the standard hicolor icon theme.
 
 Each `just build` resolves the latest stable
@@ -229,10 +228,10 @@ and [DECISIONS.md](docs/DECISIONS.md#cyberchef-offline-build--2026-10-15) for ra
 
 ## Bundled Homebrew and Flatpak tools
 
-**Temporary smoke-test selection:** only `ripgrep` and `org.kde.okteta` are
+**Temporary smoke-test selection:** `ripgrep`, `org.kde.okteta`, and `io.github.kolunmi.Bazaar` are
 active in the Brewfile; all other requested packages remain commented out.
-The disk preparation script passes `--exclude-aurora-defaults`, so Firefox,
-Bazaar and other inherited defaults are not installed in these test images.
+The disk preparation script keeps `--exclude-aurora-defaults`. Bazaar is
+explicitly included; other inherited defaults are excluded. Firefox is an RPM.
 Dependencies and the inherited Homebrew bootstrap are still included. The manual
 `ujust install-controlthings-tools` command also follows the reduced Brewfile;
 it does not remove applications already installed.
@@ -245,8 +244,8 @@ These are test images, not the full classroom bundle.
 Publish a container containing the changed manifest and helper before dispatching
 the disk workflow with its dated image tag: the disk job reads these files from
 the selected container, not the workflow checkout. After offline VM validation,
-uncomment the desired entries and remove `--exclude-aurora-defaults` from
-`disk_config/tools/build-tools.sh` to restore the full selection.
+uncomment the desired entries in the ControlThings Brewfile. Keep
+`--exclude-aurora-defaults` in `disk_config/tools/build-tools.sh`.
 Python tool provisioning remains pending.
 
 The following describes the full bundle to restore after smoke testing.
@@ -256,25 +255,20 @@ defines the apps prepared **only during manual disk-image builds**. Normal
 container builds ship the list and manual installer; they do not download or
 bundle these applications. Aurora's inherited Homebrew bootstrap stays unchanged.
 
-Both disk formats also install Aurora's default
-`/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile` from the selected container,
-including Firefox and Bazaar. Duplicate IDs across that list and ControlThings'
-list are installed once. Aurora's optional CLI, fonts, DX Flatpak, and other
-`ujust` bundles are excluded. Aurora's bootstrap does not automatically install
-its optional CLI collection; only ControlThings' requested formulae are added.
+Both disk formats install only the Flatpaks selected in ControlThings' Brewfile,
+including Bazaar. Aurora's `system-flatpaks.Brewfile` remains excluded, as do
+its optional CLI, fonts and DX bundles. Firefox is installed as an RPM in the
+OS image and opens the bundled CyberChef application.
 
-The list includes 30 Homebrew formulae, including `eza`, `gping`, `git-delta`
+The list includes 29 Homebrew formulae, including `eza`, `gping`, `git-delta`
 (the `delta` command), `libbladerf`, and `librtlsdr`, plus Gqrx, Obsidian, ImHex,
-Okteta, and ZAP. ZAP is AMD64-only because Flathub has no ARM64 build; ARM64 gets
-the other four apps. Use simple `brew "name"` and `flatpak "application.ID"`
+Okteta, Bazaar, and ZAP. ZAP is AMD64-only because Flathub has no ARM64 build; ARM64 gets
+the other five apps. Use simple `brew "name"` and `flatpak "application.ID"`
 declarations. The optional `# arch=x86_64` Flatpak annotation restricts an app
 to AMD64.
 
-With the reviewed Aurora default list, the combined selection has 27 Flatpak
-entries on AMD64 and 25 on ARM64. The build checks the native Flathub catalog:
-unavailable Aurora defaults on ARM64 are omitted with a warning and recorded in
-metadata (currently Thunderbird). Missing ControlThings entries or catalog
-errors fail the build. The ZAP architecture annotation applies separately.
+The build checks the native Flathub catalog. Missing selected apps or catalog
+errors fail the build. The ZAP architecture annotation excludes it on ARM64.
 
 The manual disk workflow starts from the selected published container digest
 and its shipped manifest. One preparation job per run/architecture prepares Homebrew under

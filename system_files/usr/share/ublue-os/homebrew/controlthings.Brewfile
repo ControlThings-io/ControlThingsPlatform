@@ -1,5 +1,5 @@
 # Shared disk-build bundle and explicit installation list for existing systems.
-# Temporary smoke bundle: ripgrep + Okteta. Uncomment packages after offline VM validation.
+# Temporary smoke bundle: ripgrep + Okteta + Bazaar. Uncomment packages after offline VM validation.
 # Simple brew/flatpak declarations only; parsed by controlthings-tools.
 # brew "bat"
 # brew "difftastic"
@@ -37,3 +37,6 @@ brew "ripgrep"
 flatpak "org.kde.okteta"
 # Flathub does not publish ZAP for ARM64; omit it on that architecture.
 # flatpak "org.zaproxy.ZAP" # arch=x86_64
+
+# Prepare the software center before first boot, including its desktop icon.
+flatpak "io.github.kolunmi.Bazaar"

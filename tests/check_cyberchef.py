@@ -107,7 +107,7 @@ with tempfile.TemporaryDirectory(prefix="ct-cyberchef-tests-") as temporary:
 
 desktop = Path("system_files/usr/share/applications/cyberchef.desktop")
 subprocess.run(["desktop-file-validate", str(desktop)], check=True)
-assert "Exec=xdg-open file:///usr/share/cyberchef/index.html" in desktop.read_text()
+assert "Exec=firefox file:///usr/share/cyberchef/index.html" in desktop.read_text()
 assert "Icon=cyberchef\n" in desktop.read_text()
 subprocess.run(["bash", "-n", "build_files/build.sh"], check=True)
 containerfile = Path("Containerfile").read_text()

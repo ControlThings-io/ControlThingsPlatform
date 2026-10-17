@@ -80,7 +80,7 @@ def read_manifest(path: Path = MANIFEST, *, arch: str | None = None,
 def disk_selection(*, arch: str | None = None, include_aurora: bool = True) -> DiskSelection:
     """Merge Aurora's ISO defaults with ControlThings; never scan optional files.
 
-    Set include_aurora=False for a minimal smoke build: validate and hash both
+    Set include_aurora=False for ControlThings-only builds: validate and hash both
     manifests but select only custom packages. Both files must exist in the selected OS. Preserve Aurora's order and append
     our missing IDs once. Homebrew's inherited bootstrap is retained by the disk
     builder; only ControlThings formulae are added, since Aurora's CLI collection
@@ -164,7 +164,7 @@ def main() -> None:
     parser.add_argument('--available-flatpaks', type=Path,
                         help='Native remote catalog; only valid with disk-selection')
     parser.add_argument('--exclude-aurora-defaults', action='store_true',
-                        help='Smoke builds only: select custom entries without Aurora defaults')
+                        help='Select custom entries without Aurora defaults')
     args = parser.parse_args()
     if args.exclude_aurora_defaults and args.action != 'disk-selection':
         parser.error('--exclude-aurora-defaults requires disk-selection')

@@ -2,7 +2,7 @@
 Type=Application
 Name=CyberChef
 Comment=Encode, decode, and analyze data offline
-Exec=xdg-open file:///usr/share/cyberchef/index.html
+Exec=firefox file:///usr/share/cyberchef/index.html
 Icon=cyberchef
 Terminal=false
 Categories=Utility;Development;

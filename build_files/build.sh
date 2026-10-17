@@ -15,6 +15,7 @@ cp -avf "/ctx/system_files"/. /
 # this installs a package from fedora repos
 PACKAGES=(
     fish
+    firefox
     python3
     wireshark
     xdg-utils

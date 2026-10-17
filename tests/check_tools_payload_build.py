@@ -81,7 +81,7 @@ case "$1" in
     install)
         [[ " $* " != *" --no-deploy "* ]]
         [[ " $* " != *" org.mozilla.firefox "* ]]
-        [[ " $* " != *" io.github.kolunmi.Bazaar "* ]]
+        [[ " $* " == *" io.github.kolunmi.Bazaar"* ]]
         [[ " $* " == *" org.kde.okteta"* ]]
         [[ " $* " != *" org.optional.App "* ]]
         mkdir -p /var/lib/flatpak/app/org.controlthings.Fixture
@@ -139,7 +139,7 @@ esac
     assert installed['homebrew_versions'] == ['fixture 1.0']
     assert installed['manifests_sha256']['controlthings.Brewfile'] == hashlib.sha256(custom.read_bytes()).hexdigest()
     assert set(installed['manifests_sha256']) == {'controlthings.Brewfile', 'system-flatpaks.Brewfile'}
-    assert installed['flatpak'] == ['org.kde.okteta']
+    assert installed['flatpak'] == ['org.kde.okteta', 'io.github.kolunmi.Bazaar']
     assert installed['brew'] == ['ripgrep']
     assert installed['profile'] == 'smoke'
     assert installed['aurora_flatpaks'] == []
