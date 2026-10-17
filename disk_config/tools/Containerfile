@@ -1,4 +1,4 @@
-# Used only by build-disk.py; never published as a channel update image.
+# Used only by build-disk.py; retained in a separate disk-payload cache package.
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE} AS tools-builder
 ARG DISK_BUILD_ID
@@ -15,6 +15,15 @@ COPY build-tools.sh /build-tools.sh
 RUN bash /build-tools.sh
 
 FROM ${BASE_IMAGE}
+ARG BASE_IMAGE
+ARG PAYLOAD_RECIPE
+ARG UPDATE_REF
+ARG SOURCE_REPOSITORY
+LABEL org.opencontainers.image.source=${SOURCE_REPOSITORY} \
+      io.controlthings.disk.purpose="installer application cache; not an OS update channel"
+LABEL io.controlthings.disk.source=${BASE_IMAGE} \
+      io.controlthings.disk.recipe=${PAYLOAD_RECIPE} \
+      io.controlthings.disk.channel=${UPDATE_REF}
 # bootc installs image /var content on initial installation and preserves it on
 # upgrades. Keep prepared stores out of the published OS image and out of /usr.
 COPY --chown=1000:1000 --from=tools-builder /var/home/linuxbrew /var/home/linuxbrew

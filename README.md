@@ -277,12 +277,15 @@ metadata (currently Thunderbird). Missing ControlThings entries or catalog
 errors fail the build. The ZAP architecture annotation applies separately.
 
 The manual disk workflow starts from the selected published container digest
-and its shipped manifest. A temporary local image prepares Homebrew under
+and its shipped manifest. One preparation job per run/architecture prepares Homebrew under
 `/var/home/linuxbrew/.linuxbrew` and system Flatpaks under `/var/lib/flatpak`,
 including dependencies and extra-data processing. Both ISO and QCOW2 install
 these populated stores; their apps need no first-boot download or custom seed
-service. Builds require internet access and extra working space. The temporary
-image is not published, and installed systems follow the original OS channel.
+service. Builds require internet access and extra working space. Preparation
+retains its image in the separate GHCR `controlthingsplatform-disk-payload`
+package, under a unique `run-RUNID-ATTEMPT-ARCH` tag. Both formats pull its exact
+digest; installed systems follow the original OS channel. Cache images are
+installer inputs, not supported targets for `bootc switch`.
 Before disk assembly, the script removes only its own labelled, dangling
 tools-builder images to reclaim duplicate app stores. It reports storage usage
 around that cleanup; full builds still require substantial working space.
@@ -363,17 +366,47 @@ credentials when authentication is required.
 The [Build disk images workflow](.github/workflows/build-disk.yml) runs manually
 and builds an interactive ISO installer and a QCOW2 VM disk for the selected
 **platform**: `amd64` (default) or `arm64`. Builds use native Ubuntu runners.
-Open **Actions → Build disk images → Run workflow**, select the platform, and supply a
+Open **Actions → Build disk images → Run workflow**, select the platform and
+**format** (`qcow2` by default, `iso`, or `both`), and supply a
 published channel (`latest`, `ics410_l01`, or `ics410-l01` if published with that
 spelling), or a dated tag such as `latest-20261015-5118339`. Channel names retain
 their exact spelling; hyphens and underscores are not aliases.
 
-Both jobs use the same resolved container digest for the selected architecture. The filename date
+Both format jobs use one prepared application payload for the selected architecture. The filename date
 and hash come from the source container version label, never the workflow's
 checkout or the disk generation date. For example:
 
 - `controlthingsplatform-latest-20261015-5118339-amd64-installer.iso`
 - `controlthingsplatform-latest-20261015-5118339-amd64.qcow2`
+
+For a fresh payload, leave **payload_ref** blank. The preparation job publishes
+the payload before disk assembly, writes its source tag and digest reference to
+the workflow summary, and uploads a small `disk-payload-...` descriptor artifact.
+Final disk metadata includes that reference and exact artifact bytes. Registry
+layer bytes are reported separately; they are not installed size or runner peak
+storage usage.
+
+For an assembly retry, use GitHub's **Re-run failed jobs** to reuse successful
+preparation. For another format or a later workflow revision, dispatch a new run
+with the same dated **image_tag** and paste the summary's full
+`ghcr.io/controlthings-io/controlthingsplatform-disk-payload@sha256:...` into
+**payload_ref**. This skips package installation and downloads the retained
+payload directly on the GitHub runner. Changes to the source digest, architecture,
+channel, or preparation recipe require fresh preparation; mismatches fail rather
+than silently reinstalling apps. Assembly-only fixes can reuse the payload.
+
+The preparation job has `packages: write`; assembly has read-only package access.
+Both log into GHCR using the workflow token, including for a private cache package.
+The new package is linked to this repository through its source label. Organization
+package policies must allow creation/access; that permission is verified by CI's
+first push/pull. There is no automatic cache deletion yet: retain referenced
+payload versions while retries are needed and remove obsolete cache versions
+through GitHub Packages when finished. Deletion prevents later reuse.
+
+Workflow-only changes can use an existing compatible OS tag without waiting for
+a new container build. Manifest/helper changes require a new published OS image.
+Dependency-image availability is checked before application preparation; this
+preflight does not prove adequate full-size runner capacity.
 
 ARM64 outputs use `arm64` in place of `amd64`. The selected tag must publish a
 matching container architecture; disk generation cannot convert an AMD64
@@ -392,7 +425,7 @@ workflow run and attempt so the two formats and repeated runs remain separate.
 Installed systems follow their source channel: `latest` updates to `latest`,
 `ics410_l01` updates to `ics410_l01`, and `ics410-l01` updates to `ics410-l01`.
 Selecting a dated tag fixes the OS source and tool list; app versions resolve at
-disk-build time. The installed system follows that tag's channel for future
+preparation time. Reusing a payload also freezes its installed app versions. The installed system follows that tag's channel for future
 updates. The ISO embeds the prepared disk-only payload and
 Anaconda installs from local container storage. Offline installation and first
 login still require VM validation.

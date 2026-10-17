@@ -2,7 +2,8 @@
 
 Run with python3; requires working rootless Podman, subordinate UID/GID mappings,
 and tar support. Uses scratch fixture stages, private VFS storage and no network.
-Checks scoped intermediate-image cleanup, prefix ownership and Flatpak hardlinks
+Checks scoped intermediate-image cleanup, OCI transport identity/provenance,
+prefix ownership and Flatpak hardlinks
 in OCI output without fetching Aurora or running package installers. Does not
 test bootc installation or establish sufficient space for full disk builds.
 """
@@ -43,8 +44,15 @@ with tempfile.TemporaryDirectory(prefix='ct-disk-oci-') as temporary:
     env = dict(os.environ, XDG_RUNTIME_DIR=str(runtime))
     command = ['podman', '--root', str(work / 'storage'), '--runroot', str(work / 'run'),
                '--storage-driver=vfs', '--events-backend=file', '--tmpdir', str(work / 'tmp')]
+    receiver = [*command]
+    receiver[receiver.index('--root') + 1] = str(work / 'receiver-storage')
+    receiver[receiver.index('--runroot') + 1] = str(work / 'receiver-run')
     try:
         subprocess.run([*command, 'build', '--pull=never', '--network=none',
+                        '--build-arg', 'BASE_IMAGE=fixture-source@sha256:' + 'a' * 64,
+                        '--build-arg', 'PAYLOAD_RECIPE=' + 'b' * 64,
+                        '--build-arg', 'UPDATE_REF=fixture-source:latest',
+                        '--build-arg', 'SOURCE_REPOSITORY=https://github.com/fixture/source',
                         '--tag', 'localhost/controlthings-disk-fixture:check', str(context)],
                        env=env, check=True)
         # An unrelated dangling image must survive the filtered cleanup too.
@@ -72,6 +80,38 @@ with tempfile.TemporaryDirectory(prefix='ct-disk-oci-') as temporary:
 
         index = json.loads((output / 'index.json').read_text())
         manifest = json.loads(blob(index['manifests'][0]['digest']).read_text())
+        config_id = manifest['config']['digest']
+        config = json.loads(blob(config_id).read_text())
+        assert config['config']['Labels']['io.controlthings.disk.recipe'] == 'b' * 64
+        assert config['config']['Labels']['io.controlthings.disk.channel'] == 'fixture-source:latest'
+        # Exercise actual Podman push/digestfile and pull-equivalent load in an
+        # empty private store. OCI archive transport needs no registry/network.
+        archive_path = work / 'payload.tar'
+        digest_path = work / 'payload.digest'
+        subprocess.run([*command, 'push', '--digestfile', str(digest_path), config_id,
+                        'oci-archive:' + str(archive_path)], env=env, check=True)
+        with tarfile.open(archive_path) as archive:
+            transported_index = json.load(archive.extractfile('index.json'))
+            transported_digest = transported_index['manifests'][0]['digest']
+            transported_manifest = json.load(archive.extractfile(
+                'blobs/sha256/' + transported_digest.split(':')[1]))
+        assert digest_path.read_text().strip() == transported_index['manifests'][0]['digest']
+        subprocess.run([*receiver, 'load', '--input', str(archive_path)], env=env, check=True)
+        received = json.loads(subprocess.check_output(
+            [*receiver, 'image', 'inspect', config_id], env=env, text=True))[0]
+        assert received['Id'].removeprefix('sha256:') == config_id.removeprefix('sha256:')
+        assert received['Labels'] == config['config']['Labels']
+        assert received['RootFS']['Layers'] == config['rootfs']['diff_ids']
+        repeated_archive = work / 'republished.tar'
+        subprocess.run([*receiver, 'push', config_id, 'oci-archive:' + str(repeated_archive)],
+                       env=env, check=True)
+        with tarfile.open(repeated_archive) as archive:
+            index_again = json.load(archive.extractfile('index.json'))
+            manifest_again = json.load(archive.extractfile(
+                'blobs/sha256/' + index_again['manifests'][0]['digest'].split(':')[1]))
+        assert [layer['digest'] for layer in manifest_again['layers']] == [
+            layer['digest'] for layer in transported_manifest['layers']]
+
         members = {}
         for layer in manifest['layers']:
             with tarfile.open(blob(layer['digest']), mode='r:*') as archive:
@@ -89,6 +129,7 @@ with tempfile.TemporaryDirectory(prefix='ct-disk-oci-') as temporary:
     finally:
         # Podman removes files owned by subordinate UIDs in its own namespace.
         # Every storage/runtime path above belongs to this temporary fixture.
-        subprocess.run([*command, 'system', 'reset', '--force'], env=env, check=True)
+        for storage in (receiver, command):
+            subprocess.run([*storage, 'system', 'reset', '--force'], env=env, check=True)
 
-print('Disk payload COPY preserved Brew ownership and Flatpak hardlinks in real OCI layers')
+print('Disk payload COPY/OCI transport preserved identity, provenance, Brew ownership and Flatpak hardlinks')

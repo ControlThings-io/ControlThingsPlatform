@@ -1,5 +1,41 @@
 # Current status
 
+## Retained payload implementation — 2026-10-16
+
+- User confirmed the smoke QCOW2 build succeeded and is downloading it for VM
+  testing. Verified [run 38985947929](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/38985947929)
+  at `5d6b593`: source tag `latest-20261017-5d6b593`, successful QCOW2 assembly
+  and upload, artifact archive 8,211,114,754 bytes. About 101 GiB was free before
+  assembly. Offline boot and OS upgrade checks are pending with the user.
+- Implemented separate preparation and assembly jobs. Preparation pushes a unique
+  image to the user-approved GHCR disk-payload cache package, validates publication
+  and base-layer preservation, then shares a digest descriptor. Both formats and
+  retries consume that payload without reinstalling Brew/Flatpak applications.
+- Added explicit `payload_ref` reuse, source/channel/recipe/platform/config identity
+  checks, metadata-only dependency preflight, registry-size reporting and exact
+  final artifact bytes. Upstream defaults remain excluded; ripgrep/Okteta remain
+  the only selected smoke apps. Normal OS publication/update channels are unchanged.
+- Validation: disk orchestration/workflow parsing, retained-payload fixtures for
+  both formats and command failures, mismatched input rejection and publication
+  failures passed. A real network-free scratch Podman fixture in private storage
+  preserved config ID, labels, layer digests, Brew UID/GID and Flatpak hardlinks
+  across OCI transport; cleanup passed. Actionlint 1.7.12 passed workflow checks
+  (without optional ShellCheck/Pyflakes), as did the existing manifest/payload
+  shell checks and whitespace/Python syntax review. Metadata-only live resolution
+  of the existing smoke source and QCOW2 builder preflight passed. The live check
+  caught Skopeo's rejection of tag@digest references; preflight now strips only
+  the tag and a regression covers it. No large local downloads or app builds.
+- Pending: first GHCR cache push/pull using repository workflow permissions and
+  real disk assembly through the new split; cross-run payload reuse; full-size
+  storage validation. No remote workflow dispatched or changes submitted here.
+- Next after commit/push: dispatch AMD64/QCOW2 using existing source tag
+  `latest-20261017-5d6b593`, with `payload_ref` blank. No new OS container is
+  required for these workflow-only changes. Save the resulting payload digest
+  from the summary; use it with the same source tag for the next reuse test.
+  ISO remains blocked by the old Fedora installer pin until separately repaired;
+  its new preflight should fail before package preparation. uv remains pending.
+
+
 ## Minimal AMD64 QCOW2 preparation — 2026-10-16
 
 - At clean starting revision `95107d6`, the diagnostic fix was already committed.
@@ -16,14 +52,13 @@
   full list and ARM64 restrictions), disk orchestration and workflow parsing,
   and the isolated payload shell verifying that only ripgrep/Okteta are selected
   and Aurora defaults are absent. These use fixtures, not actual package builds.
-- Next: commit/push when authorized, wait for the new container, then dispatch
-  AMD64 with `format=qcow2` and the new dated source tag. Old sources still carry
-  the full manifest and lack the helper exclusion option. No CI dispatched here.
+- Submitted as `5d6b593`; AMD64/QCOW2 CI succeeded in run `38985947929`.
+  Older full-bundle sources still lack the reduced manifest/helper option.
 - Boot QCOW2 offline, create the first user, verify Brew ownership, launch ripgrep
   and Okteta, then upgrade to the normal OS and verify application persistence.
   ISO pin repair, full-size capacity, reusable payload caching/size measurements,
-  and per-user uv implementation remain outstanding. Step 1 is prepared, not
-  established successful. See [usage](../README.md#bundled-homebrew-and-flatpak-tools).
+  and per-user uv implementation remain outstanding. Smoke assembly succeeded;
+  VM behavior is not yet established. See [usage](../README.md#bundled-homebrew-and-flatpak-tools).
 
 
 ## Disk diagnostic permission fix — 2026-10-16

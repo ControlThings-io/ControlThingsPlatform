@@ -264,7 +264,21 @@ assert formats["options"] == ["qcow2", "iso", "both"]
 assert workflow["jobs"]["build"]["strategy"]["matrix"]["format"] == (
     '${{ fromJSON(inputs.format == \'both\' && \'["iso","qcow2"]\' || format(\'["{0}"]\', inputs.format)) }}')
 
-assert workflow["jobs"]["build"]["needs"] == "resolve"
+assert workflow["jobs"]["build"]["needs"] == ["resolve", "prepare"]
+assert workflow["jobs"]["prepare"]["needs"] == "resolve"
+assert workflow["jobs"]["prepare"]["permissions"]["packages"] == "write"
+assert workflow["permissions"]["packages"] == "read"
+assert "payload_ref" in workflow[True]["workflow_dispatch"]["inputs"]
+# Successful job outputs survive re-run-failed-jobs; using the new run_attempt
+# directly in downloads would request an artifact that was never uploaded.
+for job_name, dependency in (("prepare", "resolve"), ("build", "prepare")):
+    download = next(step for step in workflow["jobs"][job_name]["steps"]
+                    if step.get("uses", "").startswith("actions/download-artifact@"))
+    assert download["with"]["name"] == "${{ needs." + dependency + ".outputs.artifact_name }}"
+assembly = next(step for step in workflow["jobs"]["build"]["steps"]
+                if step["name"] == "Assemble retained payload and checksum")
+assert "build disk-input/prepared.json" in assembly["run"]
+
 for job in workflow["jobs"].values():
     for step in job["steps"]:
         if "run" in step:

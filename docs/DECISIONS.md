@@ -1,5 +1,37 @@
 # Decisions
 
+## Retained disk application payload — 2026-10-16
+
+Accepted: prepare applications once per architecture and retain the result before
+assembly, so ISO, QCOW2 and assembly retries consume the same installed versions.
+The user selected a separate GHCR cache package over Actions image archives.
+Use `controlthingsplatform-disk-payload:run-RUNID-ATTEMPT-ARCH`; consumers use its
+manifest digest, never a moving tag. This supersedes the earlier prohibition on
+publishing the prepared derivative: normal OS channels still contain no app stores.
+Installed systems keep their original OS update channel.
+
+Preparation labels bind the source OS digest, update channel and preparation
+recipe hash; source digest covers the shipped manifest/helper. Reuse validates
+labels, platform and config identity before running the payload. Publication also
+checks that the base OS layer digests remain an unchanged prefix. A separate
+prepare job uploads a small descriptor before assembly jobs start. Successful
+job outputs identify artifacts across re-run-failed-jobs attempts. A new dispatch
+can explicitly reuse the digest with matching inputs, including after assembly
+code fixes. No silent fallback to fresh application installs is allowed.
+
+GHCR avoids a second large archive on the already constrained runner and supports
+content-addressed image storage. It adds a push/pull to the first single-format
+build; expected savings are for multiple formats and retries, not a promised
+first-run speedup. Only preparation receives package-write permission. A source
+repository label links the cache package for workflow access. Registry retention
+is manual for now; automated cleanup is deferred until retention needs are known.
+
+Keep the smoke package set while validating this transport. Full-size storage,
+VM boot/upgrade and uv provisioning remain separate checks. Early dependency
+manifest checks catch unavailable installer/builder pins before package work.
+See [usage](../README.md#disk-builder-and-configuration) and [status](STATUS.md).
+
+
 ## Minimal disk validation — 2026-10-16
 
 Accepted: temporarily comment out all custom packages except ripgrep and Okteta,
@@ -72,10 +104,10 @@ full-size capacity still needs CI. See [current evidence](STATUS.md#disk-assembl
 Initial installation imports image `/var`; subsequent OS upgrades preserve it,
 per the [bootc filesystem contract](https://bootc.dev/bootc/bootc-filesystem.7.html#var).
 Both disk formats use the locally prepared image under the original channel
-name, and future updates follow that published channel. Never publish the
-prepared derivative. Record its local image ID and actual app versions separately
-from the original OS digest. App versions resolve at disk-build time; the two
-format jobs resolve independently. Full OCI/bootc/Anaconda import validation
+name, and future updates follow that published channel. The earlier local-only
+derivative and independent preparation per format are superseded by the retained
+payload decision above. Record its registry digest, local image ID and actual app
+versions separately from the original OS digest. Full OCI/bootc/Anaconda import validation
 remains required before claiming successful offline installs.
 
 Use `gping` for the initial `qping`, canonical `git-delta` for `delta`, one `eza`,
@@ -180,9 +212,9 @@ for AMD64 and ARM EFI packages for ARM64.
 
 Derive the filename date/hash from the container's version label, since the disk
 workflow HEAD/date describe a different build, and the OCI revision label may be
-inherited from Aurora. Pull the exact digest in each job and prepare the disk-only
-app stores as described above, tagging that derivative locally with the channel
-reference. The new builder defaults to local storage; never enable
+inherited from Aurora. Prepare the disk-only stores once and retain their image
+as described above; each assembly job pulls that digest and tags it locally with
+the channel reference. The new builder defaults to local storage; never enable
 remote source resolution in these builds. QCOW2 uses that local name as its bootc
 target reference. Anaconda explicitly installs the embedded local payload while
 setting the channel as its target reference. Record the actual source digest

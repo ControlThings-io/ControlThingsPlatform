@@ -26,6 +26,11 @@ on:
         required: true
         default: latest
         type: string
+      payload_ref:
+        description: "Optional retained -disk-payload@sha256:... from a prior run; use its same source tag"
+        required: false
+        default: ""
+        type: string
       upload-to-s3:
         description: "Also upload to S3"
         required: false
@@ -51,6 +56,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       source_tag: ${{ steps.source.outputs.source_tag }}
+      artifact_name: ${{ steps.source.outputs.artifact_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -63,20 +69,87 @@ jobs:
         env:
           INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
           TARGET_ARCH: ${{ inputs.platform }}
+          DISK_FORMAT: ${{ inputs.format }}
         run: |
           python3 scripts/build-disk.py resolve \
             "${IMAGE_REGISTRY}/${IMAGE_NAME}" "$INPUT_IMAGE_TAG" \
             "$IMAGE_BUILDER" source.json --arch "$TARGET_ARCH"
+          python3 scripts/build-disk.py preflight source.json "$DISK_FORMAT"
+          echo "artifact_name=disk-source-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
       - name: Share exact source with both builds
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: disk-source-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ steps.source.outputs.artifact_name }}
           path: source.json
           if-no-files-found: error
 
+  prepare:
+    name: Prepare or reuse application payload (${{ inputs.platform }})
+    needs: resolve
+    runs-on: ${{ inputs.platform == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      artifact_name: ${{ steps.descriptor.outputs.artifact_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Download resolved source
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: ${{ needs.resolve.outputs.artifact_name }}
+          path: disk-input
+      - name: Maximize preparation space
+        if: inputs.platform == 'amd64' && inputs.payload_ref == ''
+        uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6
+      - name: Install preparation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman skopeo
+      - name: Log in to payload registry
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$REGISTRY_TOKEN" | sudo podman login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Prepare and retain application payload
+        if: inputs.payload_ref == ''
+        env:
+          TARGET_ARCH: ${{ inputs.platform }}
+        run: |
+          python3 scripts/build-disk.py prepare disk-input/source.json prepared/prepared.json \
+            --tag "run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${TARGET_ARCH}"
+      - name: Validate retained payload
+        if: inputs.payload_ref != ''
+        env:
+          PAYLOAD_REF: ${{ inputs.payload_ref }}
+        run: python3 scripts/build-disk.py reuse disk-input/source.json "$PAYLOAD_REF" prepared/prepared.json
+      - name: Record reusable payload
+        id: descriptor
+        run: |
+          echo "artifact_name=disk-payload-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads(Path('prepared/prepared.json').read_text())
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('Prepared application payload (retain for retries):\n\n')
+              summary.write('Source tag: ' + data['source_tag'] + '\n\n')
+              summary.write('Payload reference: ' + data['payload_ref'] + '\n\n')
+              summary.write('Registry layer bytes: ' + data['payload_layer_bytes'] + '\n')
+          PY
+      - name: Share immutable payload descriptor
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.descriptor.outputs.artifact_name }}
+          path: prepared/prepared.json
+          if-no-files-found: error
+      - name: Log out of payload registry
+        if: always()
+        run: sudo podman logout ghcr.io || true
+
   build:
     name: Build ${{ matrix.format }} (${{ inputs.platform }})
-    needs: resolve
+    needs: [resolve, prepare]
     runs-on: ${{ inputs.platform == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     strategy:
       fail-fast: false
@@ -85,10 +158,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Download resolved source
+      - name: Download prepared payload descriptor
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
-          name: disk-source-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ needs.prepare.outputs.artifact_name }}
           path: disk-input
       - name: Maximize build space
         if: inputs.platform == 'amd64'
@@ -96,11 +169,15 @@ jobs:
       - name: Install Podman
         run: |
           sudo apt-get update
-          sudo apt-get install -y podman
-      - name: Populate disk-only app stores, build image, and checksum
+          sudo apt-get install -y podman skopeo
+      - name: Log in to payload registry
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$REGISTRY_TOKEN" | sudo podman login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Assemble retained payload and checksum
         env:
           DISK_FORMAT: ${{ matrix.format }}
-        run: python3 scripts/build-disk.py build disk-input/source.json "$DISK_FORMAT" output
+        run: python3 scripts/build-disk.py build disk-input/prepared.json "$DISK_FORMAT" output
       - name: Upload image, checksum, manifest, and source metadata
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -125,3 +202,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y rclone
           rclone copy output/ "S3:${S3_BUCKET}/${SOURCE_TAG}/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/${TARGET_ARCH}/${DISK_FORMAT}/"
+      - name: Log out of payload registry
+        if: always()
+        run: sudo podman logout ghcr.io || true

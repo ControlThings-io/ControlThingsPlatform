@@ -3,14 +3,19 @@
 
 Usage: build-disk.py resolve IMAGE TAG BUILDER OUTPUT_JSON [--arch {amd64,arm64}]
        build-disk.py build INPUT_JSON {iso,qcow2} OUTPUT_DIR
+       build-disk.py prepare INPUT_JSON OUTPUT_JSON --tag run-RUNID-ATTEMPT-ARCH
+       build-disk.py reuse INPUT_JSON PAYLOAD_DIGEST_REF OUTPUT_JSON
+       build-disk.py preflight INPUT_JSON {iso,qcow2,both}
 
 Requires Skopeo for resolution and sudo/Podman for builds. Resolution inspects
 immutable metadata after selecting a digest; both matrix jobs consume that JSON.
-Builds pull only that digest, populate a disposable disk-only image's /var with
-Homebrew and Flatpaks, then give it the channel name in local storage. The OS and
+Preparation populates a disk-only image's /var with Homebrew and Flatpaks.
+CI retains it in a separate registry package, then assembly pulls that digest
+and gives it the channel name in local storage. The OS and
 tool manifest come from the selected digest; app versions resolve at disk-build
 time. image-builder uses local storage, and future updates follow the original
-published OS channel. Errors abort without upload.
+published OS channel. Assembly failures leave the retained payload available;
+final disk artifacts are uploaded only after successful assembly.
 """
 
 import argparse
@@ -110,23 +115,162 @@ def resolve(image: str, tag: str, builder: str,
     }
 
 
-def build(metadata: dict[str, str], kind: str, output: Path) -> None:
-    """Build one format, then emit SHA256 and source metadata beside its image.
+LABEL_PREFIX = "io.controlthings.disk."
+TOOLS_CONTEXT = Path(__file__).resolve().parents[1] / "disk_config/tools"
 
-    Output must be absent or empty. ISO embeds a local payload and sets its
-    update reference explicitly in Anaconda; QCOW2 inherits its local tag as
-    target-imgref. Prepare app stores in a disk-only derivative of the verified
-    source; never publish it. Record its image ID and app versions separately
-    from the original source digest. No remote-source option or channel pull is
-    allowed here. Missing manifest/helper in an older source fails the build.
+
+def recipe_digest() -> str:
+    """Hash preparation inputs; source digest already covers its helper/manifest.
+
+    Include names and separators so different file boundaries cannot collide.
+    Assembly-script changes do not invalidate an already prepared payload.
+    """
+    digest = hashlib.sha256()
+    for name in ("Containerfile", "build-tools.sh"):
+        digest.update(name.encode() + b"\0")
+        digest.update((TOOLS_CONTEXT / name).read_bytes() + b"\0")
+    return digest.hexdigest()
+
+
+def payload_labels(metadata: dict[str, str]) -> dict[str, str]:
+    """Return the immutable provenance required to reuse a prepared image."""
+    return {LABEL_PREFIX + "source": metadata["source_ref"],
+            LABEL_PREFIX + "recipe": recipe_digest(),
+            LABEL_PREFIX + "channel": metadata["update_ref"]}
+
+
+def payload_repository(metadata: dict[str, str]) -> str:
+    """Keep disk caches in a distinct GHCR package, never in OS channel tags."""
+    return metadata["image"] + "-disk-payload"
+
+
+def validate_payload_config(metadata: dict[str, str], config: dict) -> None:
+    """Reject mismatched platform/provenance before any payload is executed."""
+    if config.get("architecture") != metadata["architecture"] or config.get("os") != "linux":
+        raise ValueError("Retained payload has the wrong OS/architecture")
+    labels = config.get("config", {}).get("Labels", {})
+    for key, expected in payload_labels(metadata).items():
+        if labels.get(key) != expected:
+            raise ValueError(f"Retained payload mismatch: {key}; prepare a fresh payload")
+
+
+def reuse_payload(metadata: dict[str, str], reference: str) -> dict[str, str]:
+    """Validate a same-project digest reference using metadata-only registry reads.
+
+    No application data is downloaded. Reject moving tags, foreign repositories,
+    changed source/channel/recipe, multiarch indexes, and invalid image identities.
+    Returns source metadata extended with the immutable payload identity.
+    Requires Skopeo and root's registry login for private cache packages.
+    """
+    pattern = re.escape(payload_repository(metadata)) + r"@sha256:[a-f0-9]{64}"
+    if not re.fullmatch(pattern, reference):
+        raise ValueError("Use a digest reference from this project's -disk-payload package")
+    raw = run("sudo", "skopeo", "inspect", "--raw", f"docker://{reference}", capture=True)
+    manifest = json.loads(raw)
+    if "manifests" in manifest or "config" not in manifest or "layers" not in manifest:
+        raise ValueError("Expected a single-platform payload manifest")
+    config_id = canonical_image_id(manifest["config"]["digest"])
+    config = json.loads(run("sudo", "skopeo", "inspect", "--config",
+                            f"docker://{reference}", capture=True))
+    validate_payload_config(metadata, config)
+    return {**metadata, "payload_ref": reference, "payload_image_id": config_id,
+            "payload_recipe_sha256": recipe_digest(),
+            "payload_layer_bytes": str(sum(layer["size"] for layer in manifest["layers"]))}
+
+
+def publish_payload(metadata: dict[str, str], work: Path, tag: str) -> dict[str, str]:
+    """Prepare once and push a uniquely named cache image, returning its digest.
+
+    Tag must be run-RUNID-ATTEMPT-ARCH; destination is always the separate cache
+    package. Only a successful push plus registry validation yields metadata.
+    No archive is written. Registry retention is manual; do not delete payloads
+    still referenced by disk runs. Root must already be logged into GHCR.
+    """
+    if not re.fullmatch(r"run-[0-9]+-[0-9]+-" + metadata["architecture"], tag):
+        raise ValueError("Payload tag must be run-RUNID-ATTEMPT-ARCH")
+    payload_id, _ = prepare(metadata, work)
+    digest_file = work.resolve() / "payload.digest"
+    # Avoid consuming an old digest if a push is interrupted or fails.
+    digest_file.unlink(missing_ok=True)
+    destination = f"{payload_repository(metadata)}:{tag}"
+    run("sudo", "podman", "push", "--digestfile", str(digest_file),
+        payload_id, f"docker://{destination}")
+    # Push runs as root; read through sudo even under a restrictive root umask.
+    digest = run("sudo", "cat", str(digest_file), capture=True)
+    if not re.fullmatch(r"sha256:[a-f0-9]{64}", digest):
+        raise ValueError("Push did not produce a valid payload manifest digest")
+    retained = reuse_payload(metadata, f"{payload_repository(metadata)}@{digest}")
+    if retained["payload_image_id"] != payload_id:
+        raise ValueError("Published payload config changed during transport")
+    source_manifest = json.loads(run("sudo", "skopeo", "inspect", "--raw",
+                                     f'docker://{metadata["source_ref"]}', capture=True))
+    payload_manifest = json.loads(run("sudo", "skopeo", "inspect", "--raw",
+                                      f'docker://{retained["payload_ref"]}', capture=True))
+    base_layers = [layer["digest"] for layer in source_manifest["layers"]]
+    prepared_layers = [layer["digest"] for layer in payload_manifest["layers"]]
+    if prepared_layers[:len(base_layers)] != base_layers:
+        raise ValueError("Published payload did not preserve the base OS layer digests")
+    return retained
+
+
+def load_payload(metadata: dict[str, str]) -> tuple[str, dict]:
+    """Pull/verify a retained image and locally tag it with the normal OS channel.
+
+    Validate provenance before running its metadata reader. The expected config
+    ID protects identity across publication/pull. Failure never falls back to
+    downloading and installing fresh applications.
+    """
+    retained = reuse_payload(metadata, metadata["payload_ref"])
+    if retained["payload_image_id"] != metadata.get("payload_image_id"):
+        raise ValueError("Retained payload identity disagrees with preparation metadata")
+    reference = retained["payload_ref"]
+    run("sudo", "podman", "pull", "--arch", metadata["architecture"], reference)
+    payload_id = canonical_image_id(run("sudo", "podman", "image", "inspect", "--format",
+                                       "{{.Id}}", reference, capture=True))
+    if payload_id != retained["payload_image_id"]:
+        raise ValueError("Pulled payload has the wrong image config ID")
+    run("sudo", "podman", "tag", reference, metadata["update_ref"])
+    tools = json.loads(run("sudo", "podman", "run", "--rm", "--entrypoint", "cat", reference,
+                          "/var/lib/controlthings/tools/installed.json", capture=True))
+    if tools["architecture"] != ARCHITECTURES[metadata["architecture"]]:
+        raise ValueError("Retained payload tool metadata has the wrong architecture")
+    return payload_id, tools
+
+
+def preflight(metadata: dict[str, str], kind: str) -> None:
+    """Check builder/installer availability before expensive application work.
+
+    Checks only registry metadata, not layer downloads or runner capacity.
+    ISO uses the pinned FROM reference in our installer Containerfile.
+    """
+    refs = [metadata["builder_ref"]]
+    if kind in ("iso", "both"):
+        installer = TOOLS_CONTEXT.parent / "installer/Containerfile"
+        refs.append(next(line.split()[1] for line in installer.read_text().splitlines()
+                         if line.startswith("FROM ")))
+    for reference in refs:
+        # Podman accepts tag@digest pins, but Skopeo's docker transport does not.
+        # Preserve the immutable digest while dropping only a trailing tag.
+        repository, separator, digest = reference.partition("@")
+        if separator:
+            reference = re.sub(r":[^/]+$", "", repository) + "@" + digest
+        info = json.loads(run("skopeo", "inspect", "--override-arch", metadata["architecture"],
+                              "--no-tags", f"docker://{reference}", capture=True))
+        if info.get("Architecture") != metadata["architecture"] or info.get("Os") != "linux":
+            raise ValueError(f"Build dependency lacks linux/{metadata['architecture']}: {reference}")
+
+
+def prepare(metadata: dict[str, str], work: Path) -> tuple[str, dict]:
+    """Populate and validate one local payload, then release its builder stages.
+
+    Requires the selected source manifest/helper and native Podman. Returns the
+    image config ID and installed-tool metadata. The payload receives only a
+    local channel tag; publication, if requested, is a separate operation.
     """
     architecture = metadata["architecture"]
     if architecture not in ARCHITECTURES:
         raise ValueError("Architecture must be amd64 or arm64")
-    output = output.resolve()
-    output.mkdir(parents=True, exist_ok=True)
-    if any(output.iterdir()):
-        raise ValueError("Output directory must be empty")
+    work.mkdir(parents=True, exist_ok=True)
     source, channel = metadata["source_ref"], metadata["update_ref"]
     run("sudo", "podman", "pull", "--arch", architecture, source)
     run("sudo", "podman", "tag", source, channel)
@@ -142,7 +286,11 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
         "--cap-add", "SYS_ADMIN", "--cap-add", "NET_ADMIN",
         "--security-opt", "label=disable",
         "--build-arg", f"BASE_IMAGE={source}",
-        "--build-arg", f"DISK_BUILD_ID={build_id}", "--tag", channel,
+        "--build-arg", f"DISK_BUILD_ID={build_id}",
+        "--build-arg", f"PAYLOAD_RECIPE={recipe_digest()}",
+        "--build-arg", f"UPDATE_REF={channel}",
+        "--build-arg", "SOURCE_REPOSITORY=https://github.com/" + metadata["image"].removeprefix("ghcr.io/"),
+        "--tag", channel,
         "--file", "disk_config/tools/Containerfile", "disk_config/tools")
     payload_id = canonical_image_id(run(
         "sudo", "podman", "image", "inspect", "--format",
@@ -156,11 +304,36 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
     # This invocation's label exists only on that disposable stage; keep the
     # tagged payload, its ancestors and every unrelated image untouched.
     # Rootful Podman's storage directory requires root even for statfs/df.
-    run("sudo", "df", "-h", str(output), "/var/lib/containers/storage")
+    run("sudo", "df", "-h", str(work), "/var/lib/containers/storage")
     run("sudo", "podman", "image", "prune", "--force", "--filter",
         f"label=io.controlthings.disk-build={build_id}")
     run("sudo", "podman", "system", "df")
-    run("sudo", "df", "-h", str(output), "/var/lib/containers/storage")
+    run("sudo", "df", "-h", str(work), "/var/lib/containers/storage")
+    return payload_id, tools
+
+
+def build(metadata: dict[str, str], kind: str, output: Path) -> None:
+    """Assemble a disk and emit checksums/provenance into an empty directory.
+
+    A retained payload is pulled by digest and validated when payload_ref is set;
+    otherwise the local CLI prepares one. Assembly always uses the original OS
+    channel tag locally, so installed systems update from the normal OS channel.
+    No application installers run when consuming a retained payload.
+    """
+    architecture = metadata["architecture"]
+    if architecture not in ARCHITECTURES:
+        raise ValueError("Architecture must be amd64 or arm64")
+    if kind not in ("iso", "qcow2"):
+        raise ValueError("Format must be iso or qcow2")
+    output = output.resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    if any(output.iterdir()):
+        raise ValueError("Output directory must be empty")
+    channel = metadata["update_ref"]
+    if metadata.get("payload_ref"):
+        payload_id, tools = load_payload(metadata)
+    else:
+        payload_id, tools = prepare(metadata, output)
     image_type, bootc_ref = "qcow2", channel
     name = f'{metadata["image"].rsplit("/", 1)[-1]}-{metadata["source_tag"]}-{architecture}'
     if tools.get("profile") == "smoke":
@@ -199,12 +372,13 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
     )
     (output / f"{name}.source.json").write_text(
         json.dumps({**metadata, "format": kind, "filename": artifact.name,
-                    "disk_payload_image_id": payload_id, "tools": tools}, indent=2) + "\n"
+                    "disk_payload_image_id": payload_id, "artifact_bytes": artifact.stat().st_size,
+                    "tools": tools}, indent=2) + "\n"
     )
 
 
 def main() -> None:
-    """Dispatch resolve/build; write only trusted generated fields to Actions outputs."""
+    """Dispatch resolution, preparation/reuse, preflight and local disk assembly."""
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     selection = commands.add_parser("resolve")
@@ -215,6 +389,17 @@ def main() -> None:
     disk.add_argument("metadata", type=Path)
     disk.add_argument("kind", choices=("iso", "qcow2"))
     disk.add_argument("output", type=Path)
+    preparation = commands.add_parser("prepare")
+    preparation.add_argument("metadata", type=Path)
+    preparation.add_argument("output", type=Path)
+    preparation.add_argument("--tag", required=True)
+    reuse = commands.add_parser("reuse")
+    reuse.add_argument("metadata", type=Path)
+    reuse.add_argument("reference")
+    reuse.add_argument("output", type=Path)
+    check = commands.add_parser("preflight")
+    check.add_argument("metadata", type=Path)
+    check.add_argument("kind", choices=("iso", "qcow2", "both"))
     args = parser.parse_args()
     if args.command == "resolve":
         metadata = resolve(args.image, args.tag, args.builder, args.arch)
@@ -223,7 +408,20 @@ def main() -> None:
             with open(os.environ["GITHUB_OUTPUT"], "a") as stream:
                 stream.write(f'source_tag={metadata["source_tag"]}\n')
     else:
-        build(json.loads(args.metadata.read_text()), args.kind, args.output)
+        metadata = json.loads(args.metadata.read_text())
+        if args.command == "build":
+            build(metadata, args.kind, args.output)
+        elif args.command == "preflight":
+            preflight(metadata, args.kind)
+        else:
+            if args.output.exists():
+                raise ValueError("Prepared metadata output already exists")
+            if args.command == "prepare":
+                metadata = publish_payload(metadata, args.output.parent, args.tag)
+            else:
+                metadata = reuse_payload(metadata, args.reference)
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(json.dumps(metadata, indent=2) + "\n")
 
 
 if __name__ == "__main__":
