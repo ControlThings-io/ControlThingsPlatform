@@ -16,6 +16,9 @@ cp -avf "/ctx/system_files"/. /
 PACKAGES=(
     fish
     firefox
+    incus
+    incus-agent
+    lxc
     python3
     wireshark
     xdg-utils
