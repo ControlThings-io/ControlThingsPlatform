@@ -78,6 +78,11 @@ case "$1" in
         ;;
     remote-add) mkdir -p /var/lib/flatpak/repo; echo signed-flathub > /var/lib/flatpak/repo/config ;;
     config) ;;
+    override)
+        [[ "$*" == 'override --system --socket=x11 org.zaproxy.ZAP' ]]
+        mkdir -p /var/lib/flatpak/overrides
+        printf '[Context]\\nsockets=x11;\\n' > /var/lib/flatpak/overrides/org.zaproxy.ZAP
+        ;;
     install)
         [[ " $* " != *" --no-deploy "* ]]
         [[ " $* " != *" org.mozilla.firefox "* ]]
@@ -139,9 +144,25 @@ esac
     assert installed['homebrew_versions'] == ['fixture 1.0']
     assert installed['manifests_sha256']['controlthings.Brewfile'] == hashlib.sha256(custom.read_bytes()).hexdigest()
     assert set(installed['manifests_sha256']) == {'controlthings.Brewfile', 'system-flatpaks.Brewfile'}
-    assert installed['flatpak'] == ['dk.gqrx.gqrx', 'io.github.kolunmi.Bazaar',
-                                   'md.obsidian.Obsidian', 'net.werwolv.ImHex',
-                                   'org.kde.okteta', 'org.zaproxy.ZAP']
+    assert installed['flatpak'] == [
+        'com.github.tchx84.Flatseal',
+        'dk.gqrx.gqrx',
+        'io.missioncenter.MissionCenter',
+        'io.github.DenysMb.Kontainer',
+        'io.github.flattool.Warehouse',
+        'io.github.kolunmi.Bazaar',
+        'md.obsidian.Obsidian',
+        'net.werwolv.ImHex',
+        'org.fkoehler.KTailctl',
+        'org.gnome.Firmware',
+        'org.kde.gwenview',
+        'org.kde.kcalc',
+        'org.kde.kclock',
+        'org.kde.okteta',
+        'org.kde.okular',
+        'org.zaproxy.ZAP',
+    ]
+    assert (work / 'flatpak/overrides/org.zaproxy.ZAP').read_text() == '[Context]\nsockets=x11;\n'
     assert len(installed['brew']) == 29
     assert 'ripgrep' in installed['brew']
     assert 'ettercap' not in installed['brew']

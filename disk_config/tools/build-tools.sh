@@ -62,6 +62,10 @@ mount -o remount,rw /proc/sys
 mapfile -t apps < /tmp/controlthings-flatpaks.txt
 flatpak install --system --noninteractive --assumeyes \
     --arch="$(flatpak --default-arch)" flathub "${apps[@]}"
+# ZAP needs X11 access; retain the all-user workaround in the app payload.
+if [[ " ${apps[*]} " == *" org.zaproxy.ZAP "* ]]; then
+    flatpak override --system --socket=x11 org.zaproxy.ZAP
+fi
 ostree --repo=/var/lib/flatpak/repo refs | sort > /tmp/controlthings-flatpak-refs.txt
 while IFS= read -r ref; do
     printf '%s %s\n' "$ref" "$(ostree --repo=/var/lib/flatpak/repo rev-parse "$ref")"
