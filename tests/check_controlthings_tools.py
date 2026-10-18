@@ -25,8 +25,23 @@ manifest_path = ROOT / 'system_files/usr/share/ublue-os/homebrew/controlthings.B
 manifest = tools.read_manifest(manifest_path, arch='x86_64')
 assert len(manifest['brew']) == 29
 assert manifest['flatpak'] == [
-    'dk.gqrx.gqrx', 'io.github.kolunmi.Bazaar', 'md.obsidian.Obsidian',
-    'net.werwolv.ImHex', 'org.kde.okteta', 'org.zaproxy.ZAP']
+    'com.github.tchx84.Flatseal',
+    'dk.gqrx.gqrx',
+    'io.missioncenter.MissionCenter',
+    'io.github.DenysMb.Kontainer',
+    'io.github.flattool.Warehouse',
+    'io.github.kolunmi.Bazaar',
+    'md.obsidian.Obsidian',
+    'net.werwolv.ImHex',
+    'org.fkoehler.KTailctl',
+    'org.gnome.Firmware',
+    'org.kde.gwenview',
+    'org.kde.kcalc',
+    'org.kde.kclock',
+    'org.kde.okteta',
+    'org.kde.okular',
+    'org.zaproxy.ZAP',
+]
 assert 'ettercap' not in manifest['brew']
 arm_manifest = tools.read_manifest(manifest_path, arch='aarch64')
 assert arm_manifest['brew'] == manifest['brew']
@@ -50,8 +65,8 @@ with tempfile.TemporaryDirectory(prefix='ct-tools-tests-') as temporary:
     full_manifest = Path(temporary) / 'controlthings.Brewfile'
     full_manifest.write_text(full_manifest_text)
     assert len(tools.read_manifest(full_manifest)['brew']) == 29
-    assert len(tools.read_manifest(full_manifest, arch='x86_64')['flatpak']) == 6
-    assert len(tools.read_manifest(full_manifest, arch='aarch64')['flatpak']) == 5
+    assert len(tools.read_manifest(full_manifest, arch='x86_64')['flatpak']) == 16
+    assert len(tools.read_manifest(full_manifest, arch='aarch64')['flatpak']) == 15
     # Upstream defaults come only from the selected container's default list.
     # Duplicate IDs across lists are intentional and must install only once.
     upstream = Path(temporary) / 'system-flatpaks.Brewfile'
@@ -65,7 +80,7 @@ with tempfile.TemporaryDirectory(prefix='ct-tools-tests-') as temporary:
         assert selected['flatpak'].count('dk.gqrx.gqrx') == 1
         assert selected['flatpak'][:4] == ['org.mozilla.firefox', 'io.github.kolunmi.Bazaar',
                                          'dk.gqrx.gqrx', 'org.mozilla.thunderbird']
-        assert len(selected['flatpak']) == 8
+        assert len(selected['flatpak']) == 18
         assert 'org.optional.App' not in selected['flatpak']
         assert set(selected['manifests_sha256']) == {'system-flatpaks.Brewfile', 'controlthings.Brewfile'}
         assert selected['manifests_sha256']['system-flatpaks.Brewfile'] == hashlib.sha256(upstream.read_bytes()).hexdigest()
@@ -179,7 +194,12 @@ assert calls == [
      'https://flathub.org/repo/flathub.flatpakrepo'),
     ('flatpak', 'install', '--system', '--noninteractive', '--assumeyes',
      'flathub', *manifest['flatpak']),
+    ('flatpak', 'override', '--system', '--socket=x11', 'org.zaproxy.ZAP'),
 ]
+
+with patch.object(tools, 'run') as command:
+    tools.install_flatpaks(arm_manifest['flatpak'])
+    assert all(call.args[1] != 'override' for call in command.call_args_list)
 
 with patch.object(tools, 'read_manifest', return_value=manifest), patch.object(
         tools.os, 'geteuid', return_value=1000), patch.object(

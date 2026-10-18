@@ -289,6 +289,9 @@ to AMD64.
 
 The build checks the native Flathub catalog. Missing selected apps or catalog
 errors fail the build. The ZAP architecture annotation excludes it on ARM64.
+When ZAP is selected, both payload preparation and the manual installer apply
+`flatpak override --system --socket=x11 org.zaproxy.ZAP`. The payload retains
+the override under `/var/lib/flatpak`; normal OS updates do not retrofit it.
 
 The manual disk workflow starts from the selected published container digest
 and its shipped manifest. One preparation job per run/architecture prepares Homebrew under

@@ -146,3 +146,12 @@ normalization remain proposals requiring controlled measurements.
 Schedule Saturdays at 23:00 UTC (`0 23 * * 6`) instead of daily builds to reduce
 scheduled rebuild frequency. Preserve push, pull-request, and manual triggers;
 GitHub scheduling may be delayed.
+
+## ZAP X11 workaround — 2026-10-17
+
+Apply an app-specific system-wide X11 socket override after Flatpak installation
+in both disk payload preparation and the explicit installer, only when ZAP is
+selected. This fixes the user-reported ZAP bug for all accounts and avoids
+configuring the build account. ARM64 skips it because ZAP is excluded. Existing
+installs need the command documented in [README](../README.md) or the updated
+installer; OS updates preserve the mutable Flatpak store.

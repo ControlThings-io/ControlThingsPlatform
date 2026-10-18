@@ -134,11 +134,17 @@ def run(*args: str) -> None:
 
 
 def install_flatpaks(apps: list[str]) -> None:
-    """Explicitly install the fixed system app list, fetching missing packages."""
+    """Install missing system apps and allow X11 for ZAP when selected.
+
+    The ZAP workaround applies to all users. Command failures propagate so an
+    installation cannot silently finish without the required override.
+    """
     run('flatpak', 'remote-add', '--system', '--if-not-exists', 'flathub',
         'https://flathub.org/repo/flathub.flatpakrepo')
     run('flatpak', 'install', '--system', '--noninteractive', '--assumeyes',
         'flathub', *apps)
+    if 'org.zaproxy.ZAP' in apps:
+        run('flatpak', 'override', '--system', '--socket=x11', 'org.zaproxy.ZAP')
 
 
 def install(brews: list[str]) -> None:

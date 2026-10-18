@@ -1,16 +1,18 @@
 # Current status
 
-Shared main status, reviewed 2026-10-17 at starting revision `8952b79`.
+Shared main status, reviewed 2026-10-17 at starting revision `7abab6e`.
 [Decisions](DECISIONS.md) records accepted choices; [DEVELOPMENT.md](../DEVELOPMENT.md)
 has build instructions. Variant-only work belongs in `docs/<branch>/STATUS.md`
 and `DECISIONS.md`, not these shared files.
 
 ## Current work
 
-- Documentation cleanup: moved the developer guide to DEVELOPMENT, created a
-  project README, consolidated decisions/status, and added branch-document routing
-  in AGENTS. Local file/section-link, conflict-marker, and whitespace checks passed.
-  Changes are uncommitted; no runtime tests or image builds were needed or run.
+- ZAP X11 workaround implemented in payload preparation and the manual installer,
+  guarded by selected app ID. Changes are uncommitted. Installer and isolated
+  payload-shell regressions passed (mocked package commands), including retained
+  override content and ARM64 installer omission. Bash syntax and whitespace passed.
+  Updated stale test expectations to the current 16-app selection.
+  Guest validation of the new system-wide override remains pending.
 - Main uses Aurora DX stable. The custom Brewfile is enabled (29 formulae,
   16 AMD64 Flatpaks; ZAP excluded on ARM64). Aurora defaults remain excluded;
   selected apps are explicit. Firefox is an RPM and CyberChef launches it.
@@ -27,8 +29,9 @@ User-reported QCOW2 smoke results: boot, offline cold boot, ripgrep/Okteta launc
 first-user update/removal through normal Aurora tooling, reboot persistence, and
 persistence across an OS update all passed. CyberChef and `/etc/skel` content worked.
 Earlier QCOW2 testing also confirmed new-user desktop and lock-screen defaults.
-The precise tested artifact identity was not recorded; these results do not
-validate the current full app bundle, Firefox launcher, or Bazaar first-login icon.
+The user now reports all Flatpak and Brew installations validated and functional.
+ZAP requires the X11 workaround above. The precise tested artifact identity was
+not recorded; Firefox launcher and Bazaar first-login icon checks remain unrecorded.
 
 User reports ISO build success; download/installation testing remains pending.
 No ISO offline-installation success is established.
@@ -99,8 +102,9 @@ proposals, not accepted fixes or measured savings.
 
 1. Publish a current OS container and prepare a fresh AMD64 QCOW2 payload. Measure
    runner free space, payload/artifact sizes and guest free space for the full list.
-2. Boot offline; launch all GUI apps (especially Obsidian extra-data) and representative
-   Brew tools. Check first-user ownership, Bazaar's first-login icon, Firefox/CyberChef,
+2. Verify ZAP launches with the new system-wide override on a fresh payload and
+   through the updated manual installer. Check first-user ownership, Bazaar's
+   first-login icon, Firefox/CyberChef,
    MOTD toggle, and capture-group setup. Verify apps survive a normal OS update.
 3. Reuse the successful payload for ISO; install to a blank disk offline, remove
    the ISO, and verify first login, tools, and `bootc status` channel. Finish the

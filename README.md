@@ -36,8 +36,8 @@ included `.source.json` identifies the source OS, channel, and application paylo
 Main follows `latest`; course images follow their own channel, such as `ics410_l01`.
 
 AMD64 smoke QCOW2 boot, offline operation, and application persistence across an
-OS update have been reported working. Full-bundle validation and ISO installation
-are still in progress. See [current validation and gaps](docs/STATUS.md) before
+OS update have been reported working. The user reports all selected Flatpak and Brew apps functional; ISO installation
+validation remains pending. See [current validation and gaps](docs/STATUS.md) before
 choosing an image for a class or deployment. The disk workflow also offers ARM64,
 which requires a separately published ARM64 OS source.
 
@@ -57,6 +57,13 @@ ujust install-controlthings-tools
 
 This may download packages and requests administrator authorization for system
 Flatpaks. An OS container switch alone does not supply the disk image's app bundle.
+
+ZAP receives a system-wide X11 permission workaround during tool installation.
+On an existing installation, apply it once and restart ZAP:
+
+```bash
+sudo flatpak override --system --socket=x11 org.zaproxy.ZAP
+```
 
 For capture-group access, run as your normal login user, then log out and back in:
 
