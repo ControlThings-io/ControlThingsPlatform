@@ -1,15 +1,5 @@
 # Decisions
 
-## Course automatic update defaults — 2026-10-17
-
-Accepted for `ics410_l01`: retain disabled automatic updates for new disk
-installations. Ship an early systemd preset disabling `uupd.timer`,
-`rpm-ostreed-automatic.timer` and `bootc-fetch-apply-updates.timer`, and apply it
-in the OS container build. Disable timers rather than mask services, preserving
-manual updates and the `ujust toggle-updates` enable path. Existing installations
-may retain local systemd enablement choices across OS updates.
-See [usage](../README.md#automatic-update-defaults) and [status](STATUS.md).
-
 ## New-user terminal MOTD default — 2026-10-17
 
 Accepted on `main`: disable Aurora's terminal MOTD for newly created users by
