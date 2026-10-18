@@ -1,0 +1,188 @@
+"format" = "ctmodbus-server"
+"version" = 1
+"unit" = 1
+
+["identity"]
+"vendor" = "ControlThings"
+"product" = "ctmodbus simulator"
+"revision" = "1.0"
+
+[tags.InputPause]
+table = "discrete_inputs"
+address = 0
+type = "bool"
+mode = "static"
+value = 0
+
+[tags.InBitC2]
+table = "discrete_inputs"
+address = 1
+type = "bool"
+mode = "static"
+value = 0
+
+[tags.InputEmergency]
+table = "discrete_inputs"
+address = 2
+type = "bool"
+mode = "static"
+value = 0
+
+[tags.InBitC4]
+table = "discrete_inputs"
+address = 3
+type = "bool"
+mode = "static"
+value = 0
+
+[tags.InBitC5]
+table = "discrete_inputs"
+address = 4
+type = "bool"
+mode = "static"
+value = 0
+
+[tags.InBitC6]
+table = "discrete_inputs"
+address = 5
+type = "bool"
+mode = "static"
+value = 0
+
+[tags.HMIPause]
+table = "coils"
+address = 6
+type = "bool"
+mode = "static"
+value = 0
+
+[tags.HMIEmergency]
+table = "coils"
+address = 8
+type = "bool"
+mode = "static"
+value = 0
+
+[tags.Chem1Pump]
+table = "coils"
+address = 10
+type = "bool"
+mode = "sequence"
+values = [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+advance = "time"
+interval_seconds = 1.0
+repeat = true
+
+[tags.Chem2Pump]
+table = "coils"
+address = 11
+type = "bool"
+mode = "sequence"
+values = [0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+advance = "time"
+interval_seconds = 1.0
+repeat = true
+
+[tags.Chem3Pump]
+table = "coils"
+address = 12
+type = "bool"
+mode = "sequence"
+values = [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+advance = "time"
+interval_seconds = 1.0
+repeat = true
+
+[tags.Mixer]
+table = "coils"
+address = 13
+type = "bool"
+mode = "sequence"
+values = [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0]
+advance = "time"
+interval_seconds = 1.0
+repeat = true
+
+[tags.OuttakePump]
+table = "coils"
+address = 14
+type = "bool"
+mode = "sequence"
+values = [0, 0, 1]
+advance = "time"
+interval_seconds = 5.0
+repeat = true
+
+[tags.EmergencyFlush]
+table = "coils"
+address = 15
+type = "bool"
+mode = "static"
+value = 0
+
+[tags.State]
+table = "holding_registers"
+address = 0
+type = "int8"
+mode = "sequence"
+values = [1, 1, 2, 2, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 5]
+advance = "time"
+interval_seconds = 1.0
+repeat = true
+
+[tags.BatchTimer]
+table = "holding_registers"
+address = 1
+type = "int32"
+mode = "sequence"
+values = [
+    1000,
+    2000,
+    3000,
+    4000,
+    5000,
+    6000,
+    7000,
+    8000,
+    9000,
+    10000,
+    11000,
+    12000,
+    13000,
+    14000,
+    15000,
+]
+advance = "time"
+interval_seconds = 1.0
+repeat = true
+
+[tags.EmergencyTimer]
+table = "holding_registers"
+address = 3
+type = "int32"
+mode = "static"
+value = 0
+
+["hooks"]
+
+["tables"]
+
+["tables"."coils"]
+"unmapped" = "default"
+"default" = false
+"ranges" = []
+
+["tables"."discrete_inputs"]
+"unmapped" = "default"
+"default" = false
+"ranges" = []
+
+["tables"."input_registers"]
+"unmapped" = "default"
+"default" = 0
+"ranges" = []
+
+["tables"."holding_registers"]
+"unmapped" = "default"
+"default" = 0
+"ranges" = []
