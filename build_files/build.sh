@@ -19,6 +19,8 @@ PACKAGES=(
     incus
     incus-agent
     lxc
+    markdownpart
+    netcat
     python3
     wireshark
     xdg-utils
