@@ -18,6 +18,8 @@ for item in workbook-update workbook; do
     fi
 done
 resources=$(cat "$seed/resources")
+# Repair the persistent target on existing installations as well as new seeds.
+chmod 0755 "$state/workbook/$resources/workbook-update.sh"
 if [[ ! -f "$state/.workbook-cron-installed" ]]; then
     crontab -u "$account" "$state/workbook/$resources/ewb-update.cron"
     touch "$state/.workbook-cron-installed"

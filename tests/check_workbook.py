@@ -19,6 +19,7 @@ with tempfile.TemporaryDirectory(prefix='workbook-test-') as tmp:
     resources = source / 'workbook/resources'
     resources.mkdir(parents=True)
     (resources / 'ewb-update.cron').write_text('fixture cron\n')
+    (resources / 'workbook-update.sh').write_text('#!/bin/bash\nexit 0\n')
     (source / 'workbook/index.html').write_text('initial')
     credentials = source / 'workbook-update/.ssh'
     credentials.mkdir(parents=True)
@@ -51,10 +52,14 @@ with tempfile.TemporaryDirectory(prefix='workbook-test-') as tmp:
     assert key.stat().st_mode & 0o777 == 0o600
     (state / 'workbook/index.html').write_text('student state')
     key.write_text('rotated credential')
+    updater = state / 'workbook/resources/workbook-update.sh'
+    assert updater.stat().st_mode & 0o777 == 0o755
+    updater.chmod(0o644)
     before = log.read_text().count('/crontab ')
     assert initialize().returncode == 0
     assert (state / 'workbook/index.html').read_text() == 'student state'
     assert key.read_text() == 'rotated credential'
+    assert updater.stat().st_mode & 0o777 == 0o755
     assert log.read_text().count('/crontab ') == before
     assert '--no-block start ewb-update.service' in log.read_text()
 
@@ -124,6 +129,10 @@ with tempfile.TemporaryDirectory(prefix='workbook-install-') as tmp:
     checkout = sandbox / 'var/lib/ics410/workbook'
     assert (checkout / 'index.html').read_text() == 'workbook'
     assert (checkout / '.git').stat().st_mode & 0o777 == 0o700
+    assert (checkout / 'resources/workbook-update.sh').stat().st_mode & 0o777 == 0o755
+    subprocess.run([str(sandbox / 'usr/bin/workbook-update')], check=True)
+    with tarfile.open(sandbox / 'usr/share/ics410-workbook/seed.tar') as archive:
+        assert archive.getmember('workbook/resources/workbook-update.sh').mode == 0o755
     assert (sandbox / 'usr/bin/workbook-update').resolve() == checkout / 'resources/workbook-update.sh'
     assert (sandbox / 'usr/share/ics410-workbook/seed.tar').stat().st_mode & 0o777 == 0o600
     branch = subprocess.check_output(['git', '-C', str(checkout), 'branch', '--show-current'], text=True)

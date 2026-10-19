@@ -3,11 +3,17 @@
 ## Current work — 2026-10-19
 
 Workbook integration is committed as `1ced9b1`, documentation relocation as
-`b56d242`, and main Firefox changes merged as `35d3b55`. The course homepage
-change is uncommitted. Shared history
+`b56d242`, main Firefox changes merged as `35d3b55`, and the course homepage
+committed as `5934cee`. Executable updater correction is uncommitted. Shared history
 remains in [shared status](../STATUS.md); accepted course choices are in
 [course decisions](DECISIONS.md).
 
+- Updater target now receives mode 0755 before image seed creation; boot
+  initialization also repairs its mode in existing persistent checkouts.
+  `tests/check_workbook.py` passed, including actual execution through the
+  symlink, archived mode and boot-time repair. Bash syntax and whitespace passed.
+  Image build and guest execution remain unverified. An upstream Git update that
+  restores a non-executable file mode may require permission repair again.
 - Firefox now defaults to `http://localhost/` on this branch, opening the local
   workbook. All shortcuts and other Firefox defaults remain inherited from main
   and user-editable. JSON and a comparison against main confirm only Homepage.URL

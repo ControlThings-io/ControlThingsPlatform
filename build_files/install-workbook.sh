@@ -48,6 +48,8 @@ for file in workbook-update.sh ewb-update.service ewb-update.cron; do
 done
 grep -qx 'User=ics410-workbook-update' "$resources/ewb-update.service"
 runuser -u "$account" -- git -C "$root" config core.sshCommand "ssh -F $home_dir/.ssh/config"
+# Symlink execution uses the target mode; retain it in the disk and boot seed.
+chmod 0755 "$resources/workbook-update.sh"
 ln -s "$resources/workbook-update.sh" /usr/bin/workbook-update
 # Correct ExecStart's redirection without modifying the repository's service.
 install -d /usr/lib/systemd/system/ewb-update.service.d
