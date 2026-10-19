@@ -1,7 +1,7 @@
 {
   "policies": {
     "Homepage": {
-      "URL": "https://www.controlthings.io",
+      "URL": "http://localhost/",
       "StartPage": "homepage",
       "Locked": false
     },

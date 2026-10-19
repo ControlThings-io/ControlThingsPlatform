@@ -2,11 +2,18 @@
 
 ## Current work — 2026-10-19
 
-Workbook integration is committed as `1ced9b1`. Documentation relocation starts
-from that revision and is uncommitted. Shared history
+Workbook integration is committed as `1ced9b1`, documentation relocation as
+`b56d242`, and main Firefox changes merged as `35d3b55`. The course homepage
+change is uncommitted. Shared history
 remains in [shared status](../STATUS.md); accepted course choices are in
 [course decisions](DECISIONS.md).
 
+- Firefox now defaults to `http://localhost/` on this branch, opening the local
+  workbook. All shortcuts and other Firefox defaults remain inherited from main
+  and user-editable. JSON and a comparison against main confirm only Homepage.URL
+  differs in the policy; whitespace checks passed. The browser regression now
+  reads the expected homepage from the policy. Guest startup verification remains
+  pending; no browser runtime check was repeated for this URL-only change.
 - Course uses normal Aurora stable with the existing Incus/agent/LXC and netcat
   RPM selections. OS automatic-update defaults remain disabled.
 - Added workbook default-branch clone, retained read-only deploy key, writable
@@ -24,13 +31,12 @@ remains in [shared status](../STATUS.md); accepted course choices are in
 Moved course workbook build/operation guidance to [DEVELOPMENT.md](DEVELOPMENT.md)
 and restored root DEVELOPMENT.md byte-for-byte from local main at `8c7a9f1`.
 Updated course links. Shared repository guides are maintained on main; course
-additions belong under `docs/ics410_l01/`. No merge is currently in progress;
-main's code changes have not been merged by this documentation correction.
+additions belong under `docs/ics410_l01/`. Main was subsequently merged as
+`35d3b55`.
 
 Checks: exact shared-guide equality with main, local Markdown link/heading
 validation, conflict-marker review and `git diff --check`. No runtime checks were
-needed for this documentation-only correction. Next: commit this correction if
-desired, then retry the main merge and retain course-specific implementation.
+needed for that documentation-only correction, which is committed as `b56d242`.
 
 ## Workbook validation — 2026-10-19
 

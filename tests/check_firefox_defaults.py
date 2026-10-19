@@ -155,7 +155,7 @@ def main():
             state = snapshot(browser, names)
             assert state['active'] and not state['locked'], state
             assert all(state['values'][key] == value for key, value in expected.items()), state
-            assert state['values']['browser.startup.homepage'].rstrip('/') == 'https://www.controlthings.io'
+            assert state['values']['browser.startup.homepage'].rstrip('/') == policy['Homepage']['URL'].rstrip('/')
             assert state['values']['browser.startup.page'] == 1
             assert state['pins'] == pins, state['pins']
             browser.execute('''

@@ -66,3 +66,11 @@ updates. A fresh build uses a cache-busting argument and records the workbook
 commit. Existing credentials require explicit rotation. Upstream service changes
 require daemon-reload (also performed by initialization each boot); changes to
 [Install] require re-enablement. See [development guide](DEVELOPMENT.md#ics410-l01-workbook).
+
+## Firefox workbook homepage — 2026-10-19
+
+Accepted: override only `Homepage.URL` to `http://localhost/` in the inherited
+[Firefox policy](../../build_files/firefox-policies.json). Keep main's six pins,
+section defaults, and unlocked settings. The browser regression takes its expected
+homepage from the policy to support the course URL. Shared repository guides
+remain unchanged; verify fresh-user startup in the built course guest.
