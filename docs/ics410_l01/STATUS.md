@@ -2,7 +2,8 @@
 
 ## Current work — 2026-10-19
 
-Starting revision `7ec6b60`; workbook integration is uncommitted. Shared history
+Workbook integration is committed as `1ced9b1`. Documentation relocation starts
+from that revision and is uncommitted. Shared history
 remains in [shared status](../STATUS.md); accepted course choices are in
 [course decisions](DECISIONS.md).
 
@@ -16,7 +17,20 @@ remains in [shared status](../STATUS.md); accepted course choices are in
   and crontab are preserved after initialization. Normal workbook updates use
   the upstream script, which discards local edits and untracked files.
 - Workflow consumes `L01_PRIVATE_KEY`; local builds require
-  `WORKBOOK_SSH_KEY_FILE`. See [workbook build/operation instructions](../../DEVELOPMENT.md#ics410-l01-workbook).
+  `WORKBOOK_SSH_KEY_FILE`. See [workbook build/operation instructions](DEVELOPMENT.md#ics410-l01-workbook).
+
+## Documentation ownership correction — 2026-10-19
+
+Moved course workbook build/operation guidance to [DEVELOPMENT.md](DEVELOPMENT.md)
+and restored root DEVELOPMENT.md byte-for-byte from local main at `8c7a9f1`.
+Updated course links. Shared repository guides are maintained on main; course
+additions belong under `docs/ics410_l01/`. No merge is currently in progress;
+main's code changes have not been merged by this documentation correction.
+
+Checks: exact shared-guide equality with main, local Markdown link/heading
+validation, conflict-marker review and `git diff --check`. No runtime checks were
+needed for this documentation-only correction. Next: commit this correction if
+desired, then retry the main merge and retain course-specific implementation.
 
 ## Workbook validation — 2026-10-19
 

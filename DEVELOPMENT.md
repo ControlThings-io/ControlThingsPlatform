@@ -645,62 +645,28 @@ These are images derived from this template (or similar enough to this template)
 - [Amy OS](https://github.com/astrovm/amyos)
 - [VeneOS](https://github.com/Venefilyn/veneos)
 
-## ICS410 L01 workbook
+## Firefox homepage and shortcuts
 
-This course-branch feature serves the workbook at `http://localhost/` (IPv4
-loopback, port 80) independently of network availability. Its checkout is
-`/var/lib/ics410/workbook`. The upstream updater intentionally removes local
-changes and untracked files. Its cron runs every six hours and queues an `at` job
-with up to 359 minutes of delay.
+[build_files/firefox-policies.json](build_files/firefox-policies.json) supplies
+unlocked homepage settings and `Preferences` entries with `Status: default`.
+[build.sh](build_files/build.sh) installs it in the RPM's native-library Firefox
+`distribution` directory after package installation; a preexisting policies file
+stops the build for reconciliation. There is no profile copied from `/etc/skel`
+and no persistent `user.js` that reapplies personal settings.
 
-The image workflow consumes the repository Actions secret `L01_PRIVATE_KEY`.
-For local builds, provide a dedicated, unencrypted read-only deploy key outside
-the build context:
+The homepage is ControlThings on main. `browser.newtabpage.pinned` is a JSON-encoded
+array of `{url, label}` objects in display order. One row is selected, while
+widgets, stories, and sponsored content default off. Search-engine auto-pinning
+is disabled by default so it does not occupy the configured shortcut positions.
+The shortcuts apply to Firefox Home/New Tab, independently of the startup URL.
+Firefox may fill unused slots from its normal suggestions or browsing history.
+Users can change these defaults; their saved settings take precedence. This is
+stable default configuration, not a one-time profile migration or a shortcut-list
+merge mechanism. A course branch can later change only `Homepage.URL` to localhost.
 
-```bash
-sudo env WORKBOOK_SSH_KEY_FILE=/absolute/path/to/workbook-key just build
-```
-
-The key is intentionally retained in the distributed image and VM, as accepted
-for this course. Do not commit it or put it in build arguments. The workflow
-writes a temporary mode-0600 file and removes it when the build step exits.
-GitHub SSH host keys are retrieved from its HTTPS metadata endpoint during the
-build. A fresh clone of the remote default branch is required on each `just build`;
-clone or resource validation failures stop the build. Direct Podman builds must
-supply `--secret id=workbook_key,src=...` and a fresh `WORKBOOK_BUILD_EPOCH` argument.
-
-The build accepts resources under `resources/` or `docs/resources/`, validates
-required files and `User=ics410-workbook-update`, and links `/usr/bin/workbook-update`
-to the discovered script. The repository's own internal paths must match its
-layout. The update unit remains linked into the checkout. Its platform drop-in
-sets ExecStart without shell-redirection tokens. Both cron and at daemons are
-enabled; no extra systemd update timer is installed.
-
-`ics410-workbook-update` owns the checkout and uses SSH configuration under
-`/var/lib/ics410/workbook-update/.ssh`. Local Git `core.sshCommand` selects this
-configuration explicitly. The web account has no access to credentials, `.git`,
-or the root-only seed. Image seeding fills absent state and installs the user
-crontab once; it never replaces an existing checkout/key during OS updates.
-The upstream updater may replace its dedicated user's crontab after a pull.
-
-Useful guest checks and operations:
-
-```bash
-systemctl status ics410-workbook-web ewb-update crond atd
-curl --fail http://127.0.0.1/
-sudo -u ics410-workbook-update workbook-update -verbose
-sudo crontab -u ics410-workbook-update -l
-sudo -u ics410-workbook-update atq
-journalctl -u ics410-workbook-init -u ewb-update -u ics410-workbook-web
-```
-
-After an upstream service-definition update, run `sudo systemctl daemon-reload`;
-restart it if immediate execution is desired. Re-enable the absolute unit path
-if its [Install] section changes. Initialization reloads systemd at each boot.
-The built seed revision is in `/usr/share/ics410-workbook/revision` (root access).
-Key rotation for existing installations requires explicit provisioning; rebuilding
-an image does not overwrite their persistent key.
-
-Local checks: `python3 tests/check_workbook.py` and
-`python3 tests/check_workflow_tags.py`. See [course status](docs/ics410_l01/STATUS.md)
-for the actual validation and remaining VM checks.
+Run `python3 tests/check_firefox_defaults.py` with the RPM Firefox, Bubblewrap,
+RPM tools and local socket access. It uses isolated profiles and a temporary
+policy mount to check defaults, pin order/labels, lack of preference locks, and
+saved homepage/startup/widget/pin overrides after restarting Firefox. The host
+browser installation and existing profiles are not modified. In a built guest,
+check `about:policies`, Settings, and New Tab with a fresh user.

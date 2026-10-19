@@ -3,11 +3,13 @@
 ## Documentation ownership — 2026-10-17
 
 Accepted: maintain `ics410_l01` alongside `main` indefinitely. Record course-specific
-choices here and current course work in [STATUS.md](STATUS.md). Keep shared
-[decisions](../DECISIONS.md), [status](../STATUS.md), and the [README](../../README.md)
-aligned with main; link to shared information instead of duplicating it. No separate
-course README is needed. This extraction changes only the four decision/status
-files; the existing course update section in README remains untouched.
+choices here and current course work in [STATUS.md](STATUS.md). Course build and
+operation guidance belongs in [DEVELOPMENT.md](DEVELOPMENT.md). Shared user-facing
+repository guides, including root README.md and DEVELOPMENT.md, are maintained
+only on main and inherited by merge. Keep shared decision/status records aligned
+with main; use course records for variant differences and links for shared history.
+This clarifies and supersedes the earlier omission of DEVELOPMENT.md from the
+shared-document ownership rule (2026-10-19).
 
 ## Course channel and shared changes — 2026-10-17
 
@@ -63,4 +65,4 @@ Seed missing mutable state only; preserve existing checkout and credentials on O
 updates. A fresh build uses a cache-busting argument and records the workbook
 commit. Existing credentials require explicit rotation. Upstream service changes
 require daemon-reload (also performed by initialization each boot); changes to
-[Install] require re-enablement. See [development guide](../../DEVELOPMENT.md#ics410-l01-workbook).
+[Install] require re-enablement. See [development guide](DEVELOPMENT.md#ics410-l01-workbook).
