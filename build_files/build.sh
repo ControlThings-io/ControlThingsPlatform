@@ -17,6 +17,7 @@ PACKAGES=(
     fish
     firefox
     markdownpart
+    netcat
     python3
     wireshark
     xdg-utils
