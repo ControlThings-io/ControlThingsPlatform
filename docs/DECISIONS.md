@@ -155,3 +155,23 @@ selected. This fixes the user-reported ZAP bug for all accounts and avoids
 configuring the build account. ARM64 skips it because ZAP is excluded. Existing
 installs need the command documented in [README](../README.md) or the updated
 installer; OS updates preserve the mutable Flatpak store.
+
+## Editable Firefox defaults — 2026-10-19
+
+Accepted: main starts Firefox at `https://www.controlthings.io` and provides one
+row of six pinned shortcuts in the user's requested order: ControlThings Website,
+ControlThings Discord, ICS410, SANS ICS, CS2AI, and Fedora Project. Widgets, stories,
+and Support Firefox/sponsored content default off. Shortcuts use `url` and `label`
+objects in the default `browser.newtabpage.pinned` value.
+
+Use an unlocked homepage policy and default-status preferences in Firefox's RPM
+application distribution directory under `/usr`. Avoid prebuilt skeleton profiles
+and persistent user.js files; users may change startup behavior, section toggles,
+and pins, with saved personal values taking precedence. Initial defaults are
+sufficient; maintaining/updating users' customized lists is not required. Existing
+profiles with no override can also receive these defaults. Changing only the L01
+homepage to localhost is intended later, not part of this main-branch change.
+
+Configuration/build and verification details are in
+[DEVELOPMENT](../DEVELOPMENT.md#firefox-homepage-and-shortcuts); user controls are in
+[README](../README.md#firefox-defaults).

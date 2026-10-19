@@ -644,3 +644,29 @@ These are images derived from this template (or similar enough to this template)
 - [Homer](https://github.com/bketelsen/homer/)
 - [Amy OS](https://github.com/astrovm/amyos)
 - [VeneOS](https://github.com/Venefilyn/veneos)
+
+## Firefox homepage and shortcuts
+
+[build_files/firefox-policies.json](build_files/firefox-policies.json) supplies
+unlocked homepage settings and `Preferences` entries with `Status: default`.
+[build.sh](build_files/build.sh) installs it in the RPM's native-library Firefox
+`distribution` directory after package installation; a preexisting policies file
+stops the build for reconciliation. There is no profile copied from `/etc/skel`
+and no persistent `user.js` that reapplies personal settings.
+
+The homepage is ControlThings on main. `browser.newtabpage.pinned` is a JSON-encoded
+array of `{url, label}` objects in display order. One row is selected, while
+widgets, stories, and sponsored content default off. Search-engine auto-pinning
+is disabled by default so it does not occupy the configured shortcut positions.
+The shortcuts apply to Firefox Home/New Tab, independently of the startup URL.
+Firefox may fill unused slots from its normal suggestions or browsing history.
+Users can change these defaults; their saved settings take precedence. This is
+stable default configuration, not a one-time profile migration or a shortcut-list
+merge mechanism. A course branch can later change only `Homepage.URL` to localhost.
+
+Run `python3 tests/check_firefox_defaults.py` with the RPM Firefox, Bubblewrap,
+RPM tools and local socket access. It uses isolated profiles and a temporary
+policy mount to check defaults, pin order/labels, lack of preference locks, and
+saved homepage/startup/widget/pin overrides after restarting Firefox. The host
+browser installation and existing profiles are not modified. In a built guest,
+check `about:policies`, Settings, and New Tab with a fresh user.

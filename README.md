@@ -76,6 +76,17 @@ manual updates, `ujust toggle-updates` to configure Aurora automatic updates, or
 `ujust toggle-user-motd` to change your terminal MOTD preference. Course defaults
 may differ. CyberChef itself updates with the OS image.
 
+## Firefox defaults
+
+Firefox starts at [ControlThings](https://www.controlthings.io). New Tab starts
+with one row of pinned links: ControlThings Website, ControlThings Discord,
+ICS410, SANS ICS, CS2AI, and Fedora Project, in that order. Widgets, stories, and
+Support Firefox sponsored content start disabled.
+
+These are editable defaults. Change startup/homepage options in Firefox Settings,
+and edit, remove, or rearrange shortcuts through the New Tab page. Existing
+personal preferences take precedence; no browser profile is replaced.
+
 ## Documentation and development
 
 - [Aurora documentation](https://docs.getaurora.dev/) — the underlying desktop.

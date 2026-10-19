@@ -31,6 +31,14 @@ PACKAGES=(
 # Build containers should not update repository usage-counting state.
 dnf5 -y --setopt='*.countme=false' install "${PACKAGES[@]}"
 
+# Locate the RPM's application directory on both architectures. Keep user-editable
+# defaults with Firefox rather than creating or rewriting per-user profiles.
+firefox_distribution="$(rpm --eval '%{_libdir}')/firefox/distribution"
+test -d "$firefox_distribution"
+# Do not silently replace policies inherited from a future base image.
+test ! -e "$firefox_distribution/policies.json"
+install -m 0644 /ctx/firefox-policies.json "$firefox_distribution/policies.json"
+
 # Aurora's Folder View setup hook overrides the theme's default wallpaper.
 # Install one shared replacement for its dark and light themes, retaining their
 # other settings. Fail if the base image's theme layout changes unexpectedly.
