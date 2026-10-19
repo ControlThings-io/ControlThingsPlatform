@@ -8,7 +8,12 @@ and `DECISIONS.md`, not these shared files.
 
 ## Current work
 
-- Firefox editable defaults implemented on main (uncommitted): ControlThings
+- Added `nmap` to the shared Brewfile on main (uncommitted, starting at `8c7a9f1`).
+  Entry uniqueness and whitespace checks passed; installation and image builds
+  were not run. Fresh prepared disk payloads include it; existing systems can
+  use `ujust install-controlthings-tools` with the updated image.
+
+- Firefox editable defaults committed on main as `8c7a9f1`: ControlThings
   homepage, one row of the six named pins in requested order, and widgets,
   stories, and sponsored content off. Policy is installed beside the RPM Firefox.
   Real isolated Firefox 158.0 checks passed for active policy, effective defaults,
