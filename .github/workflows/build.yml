@@ -79,7 +79,17 @@ jobs:
       # This actually builds the container image
       - name: Build Image
         id: build-image
+        env:
+          L01_PRIVATE_KEY: ${{ secrets.L01_PRIVATE_KEY }}
         run: |
+          set -euo pipefail
+          umask 077
+          export WORKBOOK_SSH_KEY_FILE
+          WORKBOOK_SSH_KEY_FILE=$(mktemp "$RUNNER_TEMP/workbook-key.XXXXXX")
+          trap 'rm -f "$WORKBOOK_SSH_KEY_FILE"' EXIT
+          test -n "$L01_PRIVATE_KEY"
+          printf '%s\n' "$L01_PRIVATE_KEY" > "$WORKBOOK_SSH_KEY_FILE"
+          unset L01_PRIVATE_KEY
           sudo -E $(command -v just) build \
             ${IMAGE_NAME} \
             ${DEFAULT_TAG}

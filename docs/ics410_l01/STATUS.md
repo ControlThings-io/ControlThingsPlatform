@@ -1,22 +1,43 @@
 # ICS410 L01 current status
 
-## Current baseline — 2026-10-17
+## Current work — 2026-10-19
 
-- Course HEAD at extraction: `c685367`, the completed merge of main's `8952b79`
-  MOTD change. Earlier main integration is `6e1e987`. Shared implementation and
-  validation history live in [shared status](../STATUS.md); course choices live
-  in [course decisions](DECISIONS.md).
-- Course differences: `DEFAULT_TAG=ics410_l01` (`64dfa77`), normal Aurora stable
-  with explicit Incus/agent/LXC RPMs (`af3091b`), and disabled automatic-update
-  defaults (`a1b1733`). The course README currently also contains an automatic
-  update section; it is preserved by this four-file extraction.
-- Brewfile currently matches main: 29 formulae and 16 AMD64 Flatpaks (15 on ARM64,
-  where ZAP is excluded). These counts supersede the earlier six-Flatpak notes;
-  the additional selected Aurora apps were included in `6d17d8c` on main.
-- Documentation now separates course records from shared records. Shared
-  DECISIONS.md and STATUS.md are restored byte-for-byte from local main at
-  `8952b79`; their historical wording is retained to preserve exact agreement.
-  This documentation change is uncommitted.
+Starting revision `7ec6b60`; workbook integration is uncommitted. Shared history
+remains in [shared status](../STATUS.md); accepted course choices are in
+[course decisions](DECISIONS.md).
+
+- Course uses normal Aurora stable with the existing Incus/agent/LXC and netcat
+  RPM selections. OS automatic-update defaults remain disabled.
+- Added workbook default-branch clone, retained read-only deploy key, writable
+  checkout, linked upstream boot updater, user cron plus atd, and localhost:80
+  Python web service. The updater account owns the checkout; a separate web
+  account cannot access its key or Git metadata.
+- Missing workbook/key state is seeded from the image on boot. Existing state
+  and crontab are preserved after initialization. Normal workbook updates use
+  the upstream script, which discards local edits and untracked files.
+- Workflow consumes `L01_PRIVATE_KEY`; local builds require
+  `WORKBOOK_SSH_KEY_FILE`. See [workbook build/operation instructions](../../DEVELOPMENT.md#ics410-l01-workbook).
+
+## Workbook validation — 2026-10-19
+
+Passed: `python3 tests/check_workbook.py`, `python3 tests/check_workflow_tags.py`,
+`XDG_RUNTIME_DIR=/tmp just check`, Bash syntax and `git diff --check`.
+Fixtures exercise real local Git clone of a default branch, tar seed extraction,
+permissions, unchanged upstream service, initialization retry/preservation, and
+workflow secret-file cleanup on success/failure. Account, service, crontab and
+network commands are mocked; these checks do not prove guest behavior.
+
+Systemd verification was blocked by sandbox credential/socket restrictions.
+Private repository cloning and full builds were not run: this shell cannot
+resolve GitHub and the Actions secret is not available locally. No remote CI,
+publication, SSH authentication or VM boot success is claimed.
+
+Guest checks remaining: validate linked unit availability at boot, account/PAM
+permission for cron and at, SELinux, IPv4 localhost browser access, offline boot,
+SSH pulls under cron's HOME=/, delayed execution, persistence across reboot/OS
+update, and key isolation from the web service. Verify existing-install seeding
+as well as fresh ISO/QCOW2 installations. New seed keys do not rotate an existing
+machine's credentials; rotation needs explicit provisioning.
 
 ## Validation evidence and gaps
 
@@ -35,6 +56,9 @@
   documentation-only change.
 
 ## Next steps
+
+- Build the course image using `L01_PRIVATE_KEY` and complete the workbook guest
+  checks above. Confirm the deployed repository resource paths and service account.
 
 - Build the course OS container and prepare a fresh disk payload from that source;
   verify its channel remains `ics410_l01`.

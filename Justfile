@@ -101,7 +101,10 @@ build $target_image=image_name $tag=default_tag:
 
     set -euox pipefail
 
-    BUILD_ARGS=()
+    : "${WORKBOOK_SSH_KEY_FILE:?Set WORKBOOK_SSH_KEY_FILE to the workbook deploy key file}"
+    test -s "$WORKBOOK_SSH_KEY_FILE"
+    BUILD_ARGS=(--secret "id=workbook_key,src=$WORKBOOK_SSH_KEY_FILE")
+    BUILD_ARGS+=("--build-arg" "WORKBOOK_BUILD_EPOCH=$(date -u +%s%N)")
     BUILD_ARGS+=("--build-arg" "CYBERCHEF_BUILD_EPOCH=$(date -u +%s%N)")
     LABELS=()
     if [[ -z "$(git status -s)" ]]; then

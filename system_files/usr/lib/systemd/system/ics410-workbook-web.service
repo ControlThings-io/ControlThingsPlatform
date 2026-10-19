@@ -1,0 +1,20 @@
+[Unit]
+Description=ICS410 local workbook web server
+Requires=ics410-workbook-init.service
+After=ics410-workbook-init.service
+
+[Service]
+User=ics410-workbook-web
+ExecStart=/usr/bin/python3 -m http.server 80 --bind 127.0.0.1 --directory /var/lib/ics410/workbook
+Restart=on-failure
+RestartSec=5
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+InaccessiblePaths=/var/lib/ics410/workbook-update /var/lib/ics410/workbook/.git /usr/share/ics410-workbook
+
+[Install]
+WantedBy=multi-user.target

@@ -38,3 +38,29 @@ retain local systemd enablement choices across OS updates.
 
 The new-user MOTD default is shared behavior from main, rather than a course-only
 policy; follow its [shared decision](../DECISIONS.md#new-user-terminal-motd-default--2026-10-17).
+
+## Local workbook — 2026-10-19
+
+Accepted: clone the default branch of
+`ssh://git@github.com/sans-course-workbooks/ics410-l01-workbook.git` on every image
+build and serve its root at `http://localhost/` using Python on IPv4 loopback,
+port 80. Keep the checkout at `/var/lib/ics410/workbook`; use a separate read-only
+web account with only CAP_NET_BIND_SERVICE.
+
+Use `ics410-workbook-update` for Git ownership, SSH credentials, the upstream boot
+service and user crontab. Keep repository update files unchanged; enable the unit
+by absolute path rather than copying it. A platform drop-in corrects ExecStart
+redirection. Preserve the upstream cron/at schedule and destructive update policy.
+Git SSH configuration explicitly selects the account's SSH config despite HOME=/.
+
+The user explicitly accepts embedding `L01_PRIVATE_KEY`, a repository-scoped
+read-only deploy key, in distributed images and student VMs. Transfer it to the
+builder through a secret mount, never a build argument or traced shell value.
+The root-only image seed intentionally contains credentials for initialization;
+image recipients can extract them. Runtime permissions isolate the web account.
+
+Seed missing mutable state only; preserve existing checkout and credentials on OS
+updates. A fresh build uses a cache-busting argument and records the workbook
+commit. Existing credentials require explicit rotation. Upstream service changes
+require daemon-reload (also performed by initialization each boot); changes to
+[Install] require re-enablement. See [development guide](../../DEVELOPMENT.md#ics410-l01-workbook).

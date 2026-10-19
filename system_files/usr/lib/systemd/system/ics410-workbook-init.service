@@ -1,0 +1,13 @@
+[Unit]
+Description=Initialize persistent ICS410 workbook
+After=local-fs.target
+Before=ics410-workbook-web.service crond.service
+RequiresMountsFor=/var/lib/ics410
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/ics410-workbook-init
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

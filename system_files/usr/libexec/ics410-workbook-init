@@ -1,0 +1,26 @@
+#!/bin/bash
+# Initialize missing persistent workbook state from the image seed. Existing
+# checkout and credentials survive OS updates; never reset or replace them.
+# Refresh systemd's linked unit after seeding, and queue its boot update even on
+# upgrades where /var initially lacked the linked definition. Runs as root.
+set -euo pipefail
+seed=/usr/share/ics410-workbook
+state=/var/lib/ics410
+account=ics410-workbook-update
+install -d "$state"
+staging=$(mktemp -d "$state/.workbook-seed.XXXXXX")
+trap 'rm -rf "$staging"' EXIT
+for item in workbook-update workbook; do
+    if [[ ! -e "$state/$item" ]]; then
+        tar -C "$staging" -xf "$seed/seed.tar" "$item"
+        chown -R "$account:$account" "$staging/$item"
+        mv "$staging/$item" "$state/$item"
+    fi
+done
+resources=$(cat "$seed/resources")
+if [[ ! -f "$state/.workbook-cron-installed" ]]; then
+    crontab -u "$account" "$state/workbook/$resources/ewb-update.cron"
+    touch "$state/.workbook-cron-installed"
+fi
+systemctl daemon-reload
+systemctl --no-block start ewb-update.service

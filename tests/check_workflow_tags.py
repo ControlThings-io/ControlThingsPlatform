@@ -24,9 +24,9 @@ cases = [
     ('pull_request', '3/merge', '3', 'pr-3'),
     ('pull_request', '8/merge', '8', 'pr-8'),
     ('pull_request', '9/merge', '9', 'pr-9'),
-    ('push', 'main', '', 'latest'),
-    ('schedule', 'main', '', 'latest'),
-    ('workflow_dispatch', 'main', '', 'latest'),
+    ('push', 'main', '', 'ics410_l01'),
+    ('schedule', 'main', '', 'ics410_l01'),
+    ('workflow_dispatch', 'main', '', 'ics410_l01'),
     ('push', 'ics410_l01', '', 'ics410_l01'),
     ('push', 'ICS410_L01', '', 'ics410_l01'),
 ]
@@ -36,8 +36,10 @@ with tempfile.TemporaryDirectory(prefix='ct-pr3-tests-') as temp:
     podman = mock_bin / 'podman'
     podman.write_text('#!/usr/bin/env python3\nimport json, os, sys\nwith open(os.environ["CAPTURE_ARGS"], "w") as f: json.dump(sys.argv[1:], f)\n')
     podman.chmod(0o755)
+    key = Path(temp) / 'fixture-key'
+    key.write_text('fixture only, not a real credential')
     capture = Path(temp) / 'args.json'
-    env = dict(os.environ, XDG_RUNTIME_DIR=temp, CAPTURE_ARGS=str(capture),
+    env = dict(os.environ, WORKBOOK_SSH_KEY_FILE=str(key), XDG_RUNTIME_DIR=temp, CAPTURE_ARGS=str(capture),
                PATH=str(mock_bin) + os.pathsep + os.environ['PATH'])
     for event, ref, number, expected in cases:
         env_file = Path(temp) / 'github_env'
@@ -63,6 +65,9 @@ with tempfile.TemporaryDirectory(prefix='ct-pr3-tests-') as temp:
         assert args[0] == 'build' and args[args.index('--tag') + 1] == f'controlthingsplatform:{actual}', args
         assert any(re.fullmatch(r'CYBERCHEF_BUILD_EPOCH=\d+', arg) for arg in args), args
         assert not any(arg.startswith('TOOLS_BUILD_EPOCH=') for arg in args), args
+        assert any(re.fullmatch(r'WORKBOOK_BUILD_EPOCH=\d+', arg) for arg in args), args
+        assert args[args.index('--secret') + 1] == f'id=workbook_key,src={key}'
+        assert key.read_text() not in ' '.join(args)
         print(f'PASS {event} {ref} -> {actual}; alias tags, mocked Podman build arguments, build/rechunk shell syntax')
     for ref in ('3/merge', '8/merge', '9/merge'):
         assert not tag_pattern.fullmatch(ref)

@@ -44,6 +44,15 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     echo "Refreshing CyberChef (${CYBERCHEF_BUILD_EPOCH})" && \
     python3 /ctx/install-cyberchef.py
 
+# Always refreshed by just build; the deploy key is intentionally retained for
+# runtime pulls, as authorized for this course image.
+ARG WORKBOOK_BUILD_EPOCH=manual
+RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
+    --mount=type=secret,id=workbook_key \
+    --mount=type=tmpfs,dst=/tmp \
+    echo "Refreshing workbook (${WORKBOOK_BUILD_EPOCH})" && \
+    bash /ctx/install-workbook.sh
+
 ### LINTING
 ## Verify final image and contents are correct.
 RUN bootc container lint
