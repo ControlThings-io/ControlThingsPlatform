@@ -1,0 +1,51 @@
+{
+  "policies": {
+    "Homepage": {
+      "URL": "https://www.controlthings.io",
+      "StartPage": "homepage",
+      "Locked": false
+    },
+    "Preferences": {
+      "browser.newtabpage.pinned": {
+        "Value": "[{\"url\":\"https://www.controlthings.io\",\"label\":\"ControlThings Website\"},{\"url\":\"https://discord.gg/controlthings\",\"label\":\"ControlThings Discord\"},{\"url\":\"https://www.sans.org/ics410\",\"label\":\"ICS410\"},{\"url\":\"https://ics.sans.org\",\"label\":\"SANS ICS\"},{\"url\":\"https://www.cs2ai.org/\",\"label\":\"CS2AI\"},{\"url\":\"https://fedoraproject.org/start/\",\"label\":\"Fedora Project\"}]",
+        "Status": "default"
+      },
+      "browser.newtabpage.activity-stream.topSitesRows": {
+        "Value": 1,
+        "Status": "default"
+      },
+      "browser.newtabpage.activity-stream.feeds.topsites": {
+        "Value": true,
+        "Status": "default"
+      },
+      "browser.newtabpage.activity-stream.widgets.enabled": {
+        "Value": false,
+        "Status": "default"
+      },
+      "browser.newtabpage.activity-stream.showWeather": {
+        "Value": false,
+        "Status": "default"
+      },
+      "browser.newtabpage.activity-stream.feeds.section.topstories": {
+        "Value": false,
+        "Status": "default"
+      },
+      "browser.newtabpage.activity-stream.showSponsoredCheckboxes": {
+        "Value": false,
+        "Status": "default"
+      },
+      "browser.newtabpage.activity-stream.showSponsored": {
+        "Value": false,
+        "Status": "default"
+      },
+      "browser.newtabpage.activity-stream.showSponsoredTopSites": {
+        "Value": false,
+        "Status": "default"
+      },
+      "browser.newtabpage.activity-stream.improvesearch.topSiteSearchShortcuts.searchEngines": {
+        "Value": "",
+        "Status": "default"
+      }
+    }
+  }
+}

@@ -1,14 +1,26 @@
 # Current status
 
-Shared main status, reviewed 2026-10-17 at starting revision `7abab6e`.
+Shared main status. Firefox defaults reviewed 2026-10-19 at starting revision
+`6305525`; earlier application/image evidence below retains its historical scope.
 [Decisions](DECISIONS.md) records accepted choices; [DEVELOPMENT.md](../DEVELOPMENT.md)
 has build instructions. Variant-only work belongs in `docs/<branch>/STATUS.md`
 and `DECISIONS.md`, not these shared files.
 
 ## Current work
 
+- Firefox editable defaults implemented on main (uncommitted): ControlThings
+  homepage, one row of the six named pins in requested order, and widgets,
+  stories, and sponsored content off. Policy is installed beside the RPM Firefox.
+  Real isolated Firefox 158.0 checks passed for active policy, effective defaults,
+  pin order/labels, unlocked preferences, and saved homepage/session restore,
+  widgets and edited pin across restart. Bash syntax, policy JSON and whitespace
+  checks passed. Host browser profiles were untouched. Image build, ARM64 and
+  graphical guest verification remain pending. Next: fresh guest `about:policies`,
+  startup, Settings and New Tab checks. See
+  [build/configuration](../DEVELOPMENT.md#firefox-homepage-and-shortcuts).
+
 - ZAP X11 workaround implemented in payload preparation and the manual installer,
-  guarded by selected app ID. Changes are uncommitted. Installer and isolated
+  guarded by selected app ID (committed as `70a7af1`). Installer and isolated
   payload-shell regressions passed (mocked package commands), including retained
   override content and ARM64 installer omission. Bash syntax and whitespace passed.
   Updated stale test expectations to the current 16-app selection.
