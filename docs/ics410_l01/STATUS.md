@@ -4,10 +4,15 @@
 
 Workbook integration is committed as `1ced9b1`, documentation relocation as
 `b56d242`, main Firefox changes merged as `35d3b55`, and the course homepage
-committed as `5934cee`. Executable updater correction is uncommitted. Shared history
+committed as `5934cee`. Executable updater correction is committed as `8f3b701`.
+Nmap Brewfile addition is uncommitted. Shared history
 remains in [shared status](../STATUS.md); accepted course choices are in
 [course decisions](DECISIONS.md).
 
+- Added `nmap` to the course Brewfile (29 formulae). Entry uniqueness and
+  whitespace checks passed; installation and image builds were not run. New
+  prepared disk payloads include it; existing systems can install the current
+  list with `ujust install-controlthings-tools`.
 - Updater target now receives mode 0755 before image seed creation; boot
   initialization also repairs its mode in existing persistent checkouts.
   `tests/check_workbook.py` passed, including actual execution through the
