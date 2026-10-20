@@ -165,6 +165,72 @@ countme cookies before rechunking. Two tiny cookies were observed invalidating a
 and installed-system repository settings. Reproducible RPM/DNF state and timestamp
 normalization remain proposals requiring controlled measurements.
 
+## Same-commit layer investigation — 2026-10-19
+
+Measured evidence, not an accepted normalization implementation. The two images
+labelled `latest.20261020-0ae7fc9` are distinct builds:
+
+- Old: `sha256:4c460c7f45deba8dbcf179bfd67ae9287de56bd906aca0358d657a22e20b46a0`,
+  created label `2026-10-20T01:30:23Z`,
+  [run 39353575656](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/39353575656).
+- New: `sha256:3b69198f1f0db6fcd22e5f2c6f1b09237e9eb726ca7b48948a581f0b8a10e5db`,
+  created label `2026-10-20T01:46:06Z`,
+  [run 39355159134](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/39355159134).
+
+Both contain 256 layers; 232 compressed digests match. The 24 replacement layers
+sum to **604,756,457 bytes** (604.756 MB / 576.741 MiB). Complete compressed layer
+totals are 6,690,270,731 and 6,690,271,043 bytes: growth is only **312 bytes**.
+This measures replacement registry blobs, not captured client network traffic or
+installed-size growth. Both logs pulled the same 256 Aurora blobs and show base
+image ID `23edd628d828`, identical 12-package transactions, CyberChef v11.5.0 with
+archive SHA-256 `f6478925d3eaa16ec08626a85f5b85eed10d531a5e18700615fed7ecb024cccf`,
+and the same pinned Chunkah. Layer component grouping is identical.
+
+All 48 old/new replacement blobs were downloaded and their compressed SHA-256
+verified. Compared every member's payload hash, path/type/link target, size,
+mtime, ownership, mode, and PAX attributes. Only mtimes and five database-related
+file payloads differ; no added/removed paths or package/application payload changes
+were found. Of 848 distinct changed paths, 255 are directories, 2 symlinks, and
+591 regular files; 586 regular files differ only by mtime, including 460 samples.
+
+| Replacement layer group | Layers | New compressed bytes | Observed cause |
+| --- | ---: | ---: | --- |
+| Large sample documents/captures | 10 | 163,902,725 | Mtimes only |
+| Wallpapers | 6 | 102,959,357 | Mtimes only |
+| Mixed sample/application components | 4 | 185,575,314 | Mtimes only |
+| Mixed RPM components | 1 | 16,071,566 | Mtimes only, including directories and Plasma hooks |
+| RPM database | 1 | 53,554,539 | Install-time fields plus mtimes |
+| Unclaimed content | 1 | 78,048,530 | RPM SQLite shared-memory file plus mtimes |
+| DNF history | 1 | 4,644,426 | Transaction times and SQLite state |
+
+The **21 mtime-only layers account for 468,508,962 bytes (77.47%)**. Git checkout
+mtimes enter via `COPY system_files` and `cp -avf`; the same large SANS PDF has
+mtime `01:28:16Z` versus `01:45:23Z`. `install` and package hooks also generate
+new mtimes. Parent directory headers recur across packed layers, so normalization
+must cover directories as well as leaf files. Unchanged sample/asset bytes make
+entire gzip blobs different through their tar headers.
+
+The other three layers account for 136,247,495 bytes. Both RPM databases contain
+exactly the same 2,599 package identities. Comparing all changed package headers
+finds exactly 12 headers differing only in `INSTALLTIME` (1008) and `INSTALLTID`
+(1128). DNF's logical tables differ only in the transaction start/end timestamps;
+its SQLite main/WAL/SHM bytes differ. The fifth changed payload is RPM's SHM file.
+There are no countme cookies in either unclaimed layer; the earlier cleanup is
+working, but does not eliminate these independent causes. The sole changed image
+config label is `org.opencontainers.image.created`; config/history metadata alone
+cannot explain the 24 changed filesystem diff IDs.
+
+Proposed next work: controlled deterministic-mtime experiments covering copied
+assets, generated files, and directory headers, followed by separate database
+component isolation/cleanup experiments. Preserve RPM inventory and DNF history;
+do not delete databases as a size workaround. Chunkah documents
+[`SOURCE_DATE_EPOCH`](https://github.com/coreos/chunkah#highlights), but exact pinned
+behavior and interaction with inherited layers must be tested. A commit-wide
+epoch can stabilize same-commit rebuilds yet change unchanged assets at every
+new commit. Test both identical-input rebuilds and a small subsequent source edit.
+The 468.509 MB is the measured timestamp-only portion of this pair, not a proven
+future saving; the first normalization deployment can itself replace layers.
+
 ## Weekly container builds — 2026-10-15
 
 Schedule Saturdays at 23:00 UTC (`0 23 * * 6`) instead of daily builds to reduce

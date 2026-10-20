@@ -1,6 +1,6 @@
 # Current status
 
-Shared main status. VMDK/format selection work on 2026-10-19 starts at `cd57dc9`;
+Shared main status. Layer investigation on 2026-10-19 starts at `4e88610`;
 earlier application/image evidence below retains its historical scope.
 [Decisions](DECISIONS.md) records accepted choices; [DEVELOPMENT.md](../DEVELOPMENT.md)
 has build instructions. Variant-only work belongs in `docs/<branch>/STATUS.md`
@@ -8,8 +8,20 @@ and `DECISIONS.md`, not these shared files.
 
 ## Current work
 
+- Completed the same-commit `0ae7fc9` image investigation: exact supplied digests
+  share 232/256 layers; 24 replacements total 604,756,457 compressed bytes while
+  total compressed size grows only 312 bytes. All 48 changed old/new blobs were
+  SHA-256 verified and their tar payloads/metadata compared. Twenty-one layers
+  (468,508,962 bytes) differ only in mtimes; the other three contain RPM/DNF
+  bookkeeping changes. Same base layers, 2,599 package identities, CyberChef
+  archive and Chunkah grouping; RPM changes are 12 install-time/transaction-time
+  header pairs and DNF logical changes are transaction timestamps only. No
+  runtime/build changes were made. See [evidence and proposed next work](DECISIONS.md#same-commit-layer-investigation--2026-10-19).
+  Next: measure deterministic mtimes across identical builds and a small source
+  edit, then evaluate database component isolation without losing inventory/history.
+
 - Added AMD64 VMDK assembly for VMware Workstation and independent QCOW2/ISO/VMDK
-  workflow checkboxes (uncommitted). QCOW2 alone defaults on; empty selections
+  workflow checkboxes (`4e88610`). QCOW2 alone defaults on; empty selections
   and ARM64 VMDK fail before preparation. All selected outputs reuse the same
   application payload, with native builder output, checksums, metadata, and
   optional S3 uploads. QCOW2/VMDK share Btrfs and the 64 GiB root minimum.
