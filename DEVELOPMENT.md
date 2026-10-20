@@ -229,6 +229,36 @@ step. Direct Podman builds should pass a fresh
 `--build-arg CYBERCHEF_BUILD_EPOCH="$(date -u +%s%N)"` to request the same refresh
 behavior; otherwise normal layer caching applies.
 
+GitHub Actions authenticates the release API lookup with the job's temporary
+`github.token`. The workflow writes a mode-0600 temporary file, passes it through
+an optional Podman secret mount, and deletes it on success or failure. Token
+contents are not passed as build arguments, logged, or retained in the image.
+Only `https://api.github.com` receives authentication; API redirects are rejected.
+The shared [API helper](build_files/github_api.py) retries transient HTTP errors
+at most twice, respecting numeric Retry-After and rate-limit reset headers up to
+60 seconds per wait. Longer backoffs fail for a later build retry. The shared
+[download helper](build_files/http_download.py) applies the same retry policy to
+the ZIP and license, including network timeouts and incomplete transfers. Each
+retry restarts the download; checksum validation still applies. Asset and license
+downloads do not receive the API token.
+
+Eligible publishing jobs authenticate to GHCR before building. The existing
+Docker login supports signing; rootful Podman uses a separate temporary auth file
+through `REGISTRY_AUTH_FILE` for pulls and pushes. An `always()` cleanup step
+removes that file. Pull requests retain the existing anonymous registry behavior.
+
+Local builds remain anonymous unless `GITHUB_API_TOKEN_FILE` points to a nonempty
+token file outside the build context. For example:
+
+```bash
+sudo env GITHUB_API_TOKEN_FILE=/absolute/path/to/token just build
+```
+
+Direct Podman builds can supply
+`--secret id=github_token,src=/absolute/path/to/token`. Never commit the token
+file. Local authentication/cleanup regressions run with
+`python3 tests/check_github_api.py`; they use fixture credentials and no network.
+
 The complete ZIP is installed, preserving assets and workers. A stable
 `index.html` symlink points to the versioned HTML file. The matching upstream
 license is included as `LICENSE`, and `release.json` records the version, asset,

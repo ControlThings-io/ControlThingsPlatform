@@ -39,7 +39,13 @@ with tempfile.TemporaryDirectory(prefix='ct-pr3-tests-') as temp:
     capture = Path(temp) / 'args.json'
     env = dict(os.environ, XDG_RUNTIME_DIR=temp, CAPTURE_ARGS=str(capture),
                PATH=str(mock_bin) + os.pathsep + os.environ['PATH'])
+    token = Path(temp) / 'api-token'
+    token.write_text('fixture-api-token')
     for event, ref, number, expected in cases:
+        if event == 'push':
+            env['GITHUB_API_TOKEN_FILE'] = str(token)
+        else:
+            env.pop('GITHUB_API_TOKEN_FILE', None)
         env_file = Path(temp) / 'github_env'
         env_file.write_text('')
         case_env = dict(env, GITHUB_EVENT_NAME=event, GITHUB_REF_NAME=ref,
@@ -57,9 +63,11 @@ with tempfile.TemporaryDirectory(prefix='ct-pr3-tests-') as temp:
                                     env=env, capture_output=True, text=True, check=True)
             subprocess.run(['bash', '-n'], input=result.stdout + result.stderr,
                            text=True, check=True)
-        subprocess.run(['just', 'build', 'controlthingsplatform', actual],
+        build = subprocess.run(['just', 'build', 'controlthingsplatform', actual],
                        env=env, capture_output=True, text=True, check=True)
         args = json.loads(capture.read_text())
+        assert token.read_text() not in build.stdout + build.stderr + ' '.join(args)
+        assert (f'id=github_token,src={token}' in args) == (event == 'push')
         assert args[0] == 'build' and args[args.index('--tag') + 1] == f'controlthingsplatform:{actual}', args
         assert any(re.fullmatch(r'CYBERCHEF_BUILD_EPOCH=\d+', arg) for arg in args), args
         assert not any(arg.startswith('TOOLS_BUILD_EPOCH=') for arg in args), args

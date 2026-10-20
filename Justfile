@@ -102,6 +102,10 @@ build $target_image=image_name $tag=default_tag:
     set -euox pipefail
 
     BUILD_ARGS=()
+    if [[ -n "${GITHUB_API_TOKEN_FILE:-}" ]]; then
+        test -s "$GITHUB_API_TOKEN_FILE"
+        BUILD_ARGS+=(--secret "id=github_token,src=$GITHUB_API_TOKEN_FILE")
+    fi
     BUILD_ARGS+=("--build-arg" "CYBERCHEF_BUILD_EPOCH=$(date -u +%s%N)")
     LABELS=()
     if [[ -z "$(git status -s)" ]]; then

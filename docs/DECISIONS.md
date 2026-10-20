@@ -92,6 +92,23 @@ installation. Normalize file timestamps to release publication time; record no
 build timestamp. Latest-release selection can change across builds; pinning for
 classrooms remains a proposal. See [build details](../DEVELOPMENT.md#cyberchef-offline-application).
 
+## Build-time GitHub API authentication — 2026-10-19
+
+Accepted: authenticate CyberChef release metadata requests using the Actions
+job's temporary `github.token`, passed via a private runner file and Podman build
+secret. Delete the runner file on exit; never persist the token in image layers
+or pass it as a build argument. Local token files are optional. Scope credentials
+to `https://api.github.com`, reject API redirects, and bound HTTP retries/backoff.
+The API helper can be reused by variant installers; main has no workbook setup.
+This addresses the anonymous API rate-limit failure observed in course run
+`39346663938`. Latest release selection and checksum verification remain intact.
+Extend the bounded retry policy to CyberChef ZIP/license downloads and transient
+network failures, including truncated transfers. Keep those requests anonymous
+and retain checksum verification. Authenticate eligible jobs before image pulls;
+rootful Podman receives an explicit temporary auth file, cleaned up with
+`always()`. Preserve Docker authentication for signing and existing branch/PR
+conditions. See [build instructions](../DEVELOPMENT.md#cyberchef-offline-application).
+
 ## ControlThings capture groups — 2026-10-15
 
 Use one shared root script for a versioned boot oneshot and the explicit
