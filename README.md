@@ -55,14 +55,14 @@ as the Homebrew owner (normally the first login user):
 ujust install-controlthings-tools
 ```
 
-This may download packages and requests administrator authorization for system
-Flatpaks. An OS container switch alone does not supply the disk image's app bundle.
+This may download packages. System Flatpaks use Aurora’s normal Flatpak
+authorization without an extra administrator prompt from this helper. An OS container switch alone does not supply the disk image's app bundle.
 
-ZAP receives a system-wide X11 permission workaround during tool installation.
-On an existing installation, apply it once and restart ZAP:
+Disk builds include a system-wide X11 workaround for ZAP. The manual installer
+applies it for the invoking user. Other existing users can apply it and restart ZAP:
 
 ```bash
-sudo flatpak override --system --socket=x11 org.zaproxy.ZAP
+flatpak override --user --socket=x11 org.zaproxy.ZAP
 ```
 
 For capture-group access, run as your normal login user, then log out and back in:

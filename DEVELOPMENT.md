@@ -351,7 +351,9 @@ ujust install-controlthings-tools
 ```
 
 This installs missing Homebrew formulae without upgrading existing ones, then
-asks for administrator authorization to install missing system Flatpaks. It can
+installs missing system Flatpaks using Aurora’s native Flatpak authorization,
+without wrapping the helper in `pkexec`. ZAP’s X11 override applies to the invoking
+user; disk preparation retains its system-wide override. It can
 download missing packages and does not remove other tools. Continue using
 Homebrew, Flatpak, or Aurora's update tooling for application updates. Installing
 Starship and Zoxide does not automatically change shell configuration.

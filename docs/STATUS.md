@@ -1,6 +1,6 @@
 # Current status
 
-Shared main status. API authentication work on 2026-10-19 starts at `e35ccbe`;
+Shared main status. Flatpak authorization work on 2026-10-19 starts at `0ae7fc9`;
 earlier application/image evidence below retains its historical scope.
 [Decisions](DECISIONS.md) records accepted choices; [DEVELOPMENT.md](../DEVELOPMENT.md)
 has build instructions. Variant-only work belongs in `docs/<branch>/STATUS.md`
@@ -8,7 +8,19 @@ and `DECISIONS.md`, not these shared files.
 
 ## Current work
 
-- Implemented build-time GitHub API authentication on main (uncommitted). Actions
+- Removed the manual tool installer's `pkexec` wrapper (uncommitted). System
+  Flatpak remote/install commands now run as the Brew owner through native
+  authorization, matching the user's reported password-free Aurora behavior.
+  The CLI's `install-flatpaks` action also accepts normal users. ZAP's manual
+  X11 override is per-user; disk payload preparation retains its all-user override.
+  Installer regression checks passed for normal-user dispatch, absence of
+  elevation commands, Brew ownership/failure boundaries and architecture filtering.
+  The isolated disk-payload shell regression and whitespace checks also passed.
+  Package commands are mocked; no guest installation was performed. Next: deploy
+  the updated image and verify `ujust install-controlthings-tools` completes
+  without authentication and ZAP launches for the invoking user.
+
+- Implemented build-time GitHub API authentication on main (`0ae7fc9`). Actions
   passes its temporary token through a private file and Podman secret; CyberChef
   uses the API-only helper with redirect rejection and bounded HTTP retries.
   ZIP/license downloads share retries for transient HTTP/network failures and
@@ -26,8 +38,9 @@ and `DECISIONS.md`, not these shared files.
   filesystem failures and registry auth-file export/cleanup. Podman and network
   requests are mocked. CyberChef
   desktop validation emitted only its existing multiple-category hint. No live
-  authenticated request, image build or remote CI run was performed. Next: commit
-  and push when authorized, then verify the container build in Actions. See
+  authenticated request, image build or remote CI run was performed in those local
+  checks. The user reports the new authenticated builds working on 2026-10-19;
+  the tested run identity is unrecorded. See
   [build instructions](../DEVELOPMENT.md#cyberchef-offline-application).
 
 - Added `/etc/skel/Samples` pointing to `/usr/share/controlthings/samples` on

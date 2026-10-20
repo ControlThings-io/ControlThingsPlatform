@@ -157,20 +157,23 @@ with patch.object(tools, 'BREW', brew), patch.object(tools, 'run', record):
     for uid in (0, 1001):
         with patch.object(tools.os, 'geteuid', return_value=uid):
             try:
-                tools.install(manifest['brew'])
+                tools.install(manifest['brew'], manifest['flatpak'])
             except RuntimeError:
                 pass
             else:
                 raise AssertionError('Root or a different Brew owner was accepted')
         assert not calls
     with patch.object(tools.os, 'geteuid', return_value=1000):
-        tools.install(manifest['brew'])
-    assert calls[-1] == ('pkexec', tools.HELPER, 'install-flatpaks')
+        tools.install(manifest['brew'], manifest['flatpak'])
+    assert calls[1][0:3] == ('flatpak', 'remote-add', '--system')
+    assert calls[2][0:3] == ('flatpak', 'install', '--system')
+    assert calls[-1] == ('flatpak', 'override', '--user', '--socket=x11', 'org.zaproxy.ZAP')
+    assert all(call[0] not in ('pkexec', 'sudo') for call in calls)
     calls.clear()
     brew.is_file.return_value = False
     with patch.object(tools.os, 'geteuid', return_value=1000):
         try:
-            tools.install(manifest['brew'])
+            tools.install(manifest['brew'], manifest['flatpak'])
         except RuntimeError:
             pass
         else:
@@ -180,12 +183,12 @@ with patch.object(tools, 'BREW', brew), patch.object(tools, 'run', record):
     with patch.object(tools.os, 'geteuid', return_value=1000), patch.object(
             tools, 'run', side_effect=subprocess.CalledProcessError(1, 'brew')) as command:
         try:
-            tools.install(manifest['brew'])
+            tools.install(manifest['brew'], manifest['flatpak'])
         except subprocess.CalledProcessError:
             pass
         else:
             raise AssertionError('Brew failure was hidden')
-        assert command.call_count == 1  # Failed Brew cannot proceed to pkexec.
+        assert command.call_count == 1  # Failed Brew cannot proceed to Flatpak.
 
 with patch.object(tools, 'run', record):
     tools.install_flatpaks(manifest['flatpak'])
@@ -194,7 +197,7 @@ assert calls == [
      'https://flathub.org/repo/flathub.flatpakrepo'),
     ('flatpak', 'install', '--system', '--noninteractive', '--assumeyes',
      'flathub', *manifest['flatpak']),
-    ('flatpak', 'override', '--system', '--socket=x11', 'org.zaproxy.ZAP'),
+    ('flatpak', 'override', '--user', '--socket=x11', 'org.zaproxy.ZAP'),
 ]
 
 with patch.object(tools, 'run') as command:
@@ -204,13 +207,9 @@ with patch.object(tools, 'run') as command:
 with patch.object(tools, 'read_manifest', return_value=manifest), patch.object(
         tools.os, 'geteuid', return_value=1000), patch.object(
         sys, 'argv', [tools.HELPER, 'install-flatpaks']), patch.object(tools, 'run') as command:
-    try:
-        tools.main()
-    except RuntimeError:
-        pass
-    else:
-        raise AssertionError('System Flatpak installation allowed without root')
-    command.assert_not_called()
+    tools.main()
+    assert command.call_args_list[1].args[:3] == ('flatpak', 'install', '--system')
+    assert all(call.args[0] == 'flatpak' for call in command.call_args_list)
 
 # Published container builds must never prepare application payloads.
 container = (ROOT / 'Containerfile').read_text()

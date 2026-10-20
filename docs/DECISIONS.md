@@ -42,8 +42,10 @@ Check that sandbox before downloads because Flatpak trigger failures can be warn
 Prune only this invocation's labelled dangling builder images to recover space;
 retain payload ancestors and unrelated storage. Full-size capacity needs validation.
 
-The helper uses the Brew owner and authorizes the fixed system Flatpak list via
-pkexec. Installing a shell tool does not itself configure it. The removed Gqrx
+The helper uses the Brew owner and installs the fixed system Flatpak list through
+native Flatpak authorization (updated 2026-10-19). The previous `pkexec` wrapper
+forced an unnecessary administrator prompt, bypassing Aurora’s normal policy.
+Installing a shell tool does not itself configure it. The removed Gqrx
 preinstall declaration can require one explicit reinstall on older development
 installs after preinstall reconciliation.
 
@@ -166,10 +168,12 @@ GitHub scheduling may be delayed.
 
 ## ZAP X11 workaround — 2026-10-17
 
-Apply an app-specific system-wide X11 socket override after Flatpak installation
-in both disk payload preparation and the explicit installer, only when ZAP is
-selected. This fixes the user-reported ZAP bug for all accounts and avoids
-configuring the build account. ARM64 skips it because ZAP is excluded. Existing
+Apply an app-specific X11 socket override after Flatpak installation, only when
+ZAP is selected. Disk payload preparation applies it system-wide. As of
+2026-10-19, the explicit installer applies it per user so it can run without
+elevating the helper; this supersedes its original system-wide behavior. The disk
+override covers all accounts without configuring the build account. ARM64 skips
+it because ZAP is excluded. Existing
 installs need the command documented in [README](../README.md) or the updated
 installer; OS updates preserve the mutable Flatpak store.
 
