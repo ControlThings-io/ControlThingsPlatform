@@ -13,6 +13,12 @@ material. Keep the shared documents aligned with main to reduce merge conflicts.
 README is the project overview and user guide; DEVELOPMENT holds the former
 README's build/customization instructions. Repository routing is in [AGENTS.md](../AGENTS.md).
 
+Clarified by user direction on 2026-10-20: README contains marketing and user help
+only. Agents may suggest README changes but must obtain explicit approval for
+the README edit before applying it; general implementation/documentation requests
+do not grant that approval. Development decisions belong here and customization
+details in DEVELOPMENT.
+
 ## Explicit application selection — 2026-10-17
 
 Prepare only the custom [Brewfile](../system_files/usr/share/ublue-os/homebrew/controlthings.Brewfile),
@@ -149,6 +155,22 @@ Use `CT-Aquila-Aurea-Machina` through Aurora's system-default KDE profile, super
 the initial assumption that it should match the desktop. User preferences take
 precedence. Keep authentication, lock timing, and the login screen unchanged.
 
+## Default login-screen background — 2026-10-20
+
+Accepted: use `CT-Aquila-Aurea-Machina` for the Plasma Login Manager login screen.
+The user confirmed Aurora's `plasma-login-manager-6.7.5-1.fc44.x86_64` uses
+`/usr/lib/plasmalogin/defaults.conf` with the image wallpaper plugin; their local
+`/etc/plasmalogin.conf` has no wallpaper override. SDDM theme configuration does
+not apply to this deployed login manager.
+
+Update only the distribution's `Image` and `PreviewImage` keys using KConfig's
+writer, preserving other inherited settings and administrator overrides under
+`/etc`. Select the existing wallpaper package instead of duplicating images.
+Fail the build if the defaults file or required wallpaper assets are missing.
+This supersedes the previous choice to leave login-screen branding unchanged;
+desktop and lock-screen configuration retain their separate mechanisms. See
+[configuration and validation](../DEVELOPMENT.md#default-login-screen-background).
+
 ## Chunkah rechunking — 2026-10-15
 
 Use pinned Chunkah in CI, matching Aurora's 256-layer packing approach. Transfer
@@ -164,6 +186,96 @@ countme cookies before rechunking. Two tiny cookies were observed invalidating a
 409.844 MiB layer. Preserve RPM inventory, transaction history, neighboring state,
 and installed-system repository settings. Reproducible RPM/DNF state and timestamp
 normalization remain proposals requiring controlled measurements.
+
+## Same-commit layer investigation — 2026-10-19
+
+Measured evidence, not an accepted normalization implementation. The two images
+labelled `latest.20261020-0ae7fc9` are distinct builds:
+
+- Old: `sha256:4c460c7f45deba8dbcf179bfd67ae9287de56bd906aca0358d657a22e20b46a0`,
+  created label `2026-10-20T01:30:23Z`,
+  [run 39353575656](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/39353575656).
+- New: `sha256:3b69198f1f0db6fcd22e5f2c6f1b09237e9eb726ca7b48948a581f0b8a10e5db`,
+  created label `2026-10-20T01:46:06Z`,
+  [run 39355159134](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/39355159134).
+
+Both contain 256 layers; 232 compressed digests match. The 24 replacement layers
+sum to **604,756,457 bytes** (604.756 MB / 576.741 MiB). Complete compressed layer
+totals are 6,690,270,731 and 6,690,271,043 bytes: growth is only **312 bytes**.
+This measures replacement registry blobs, not captured client network traffic or
+installed-size growth. Both logs pulled the same 256 Aurora blobs and show base
+image ID `23edd628d828`, identical 12-package transactions, CyberChef v11.5.0 with
+archive SHA-256 `f6478925d3eaa16ec08626a85f5b85eed10d531a5e18700615fed7ecb024cccf`,
+and the same pinned Chunkah. Layer component grouping is identical.
+
+All 48 old/new replacement blobs were downloaded and their compressed SHA-256
+verified. Compared every member's payload hash, path/type/link target, size,
+mtime, ownership, mode, and PAX attributes. Only mtimes and five database-related
+file payloads differ; no added/removed paths or package/application payload changes
+were found. Of 848 distinct changed paths, 255 are directories, 2 symlinks, and
+591 regular files; 586 regular files differ only by mtime, including 460 samples.
+
+| Replacement layer group | Layers | New compressed bytes | Observed cause |
+| --- | ---: | ---: | --- |
+| Large sample documents/captures | 10 | 163,902,725 | Mtimes only |
+| Wallpapers | 6 | 102,959,357 | Mtimes only |
+| Mixed sample/application components | 4 | 185,575,314 | Mtimes only |
+| Mixed RPM components | 1 | 16,071,566 | Mtimes only, including directories and Plasma hooks |
+| RPM database | 1 | 53,554,539 | Install-time fields plus mtimes |
+| Unclaimed content | 1 | 78,048,530 | RPM SQLite shared-memory file plus mtimes |
+| DNF history | 1 | 4,644,426 | Transaction times and SQLite state |
+
+The **21 mtime-only layers account for 468,508,962 bytes (77.47%)**. Git checkout
+mtimes enter via `COPY system_files` and `cp -avf`; the same large SANS PDF has
+mtime `01:28:16Z` versus `01:45:23Z`. `install` and package hooks also generate
+new mtimes. Parent directory headers recur across packed layers, so normalization
+must cover directories as well as leaf files. Unchanged sample/asset bytes make
+entire gzip blobs different through their tar headers.
+
+The other three layers account for 136,247,495 bytes. Both RPM databases contain
+exactly the same 2,599 package identities. Comparing all changed package headers
+finds exactly 12 headers differing only in `INSTALLTIME` (1008) and `INSTALLTID`
+(1128). DNF's logical tables differ only in the transaction start/end timestamps;
+its SQLite main/WAL/SHM bytes differ. The fifth changed payload is RPM's SHM file.
+There are no countme cookies in either unclaimed layer; the earlier cleanup is
+working, but does not eliminate these independent causes. The sole changed image
+config label is `org.opencontainers.image.created`; config/history metadata alone
+cannot explain the 24 changed filesystem diff IDs.
+
+Deferred proposals: controlled deterministic-mtime experiments covering copied
+assets, generated files, and directory headers, followed by separate database
+component isolation/cleanup experiments. Preserve RPM inventory and DNF history;
+do not delete databases as a size workaround. Chunkah documents
+[`SOURCE_DATE_EPOCH`](https://github.com/coreos/chunkah#highlights), but exact pinned
+behavior and interaction with inherited layers must be tested. A commit-wide
+epoch can stabilize same-commit rebuilds yet change unchanged assets at every
+new commit. Test both identical-input rebuilds and a small subsequent source edit.
+The 468.509 MB is the measured timestamp-only portion of this pair, not a proven
+future saving; the first normalization deployment can itself replace layers.
+
+### Deferred: monitor Aurora before local implementation — 2026-10-19
+
+Accepted user direction: defer timestamp normalization and related layer-size
+optimizations. Keep the existing build behavior while reviewing upstream progress
+when this work is revisited. This records a project watch list; no scheduled
+monitoring or GitHub notification subscription has been configured.
+
+Watch:
+
+- [Aurora PR #3028](https://github.com/ublue-os/aurora/pull/3028), merged
+  2026-10-16: filesystem timestamp normalization and non-RPM component handling.
+- [Aurora reproducibility tracker #2579](https://github.com/ublue-os/aurora/issues/2579)
+  and [update-size reporting #2810](https://github.com/ublue-os/aurora/issues/2810):
+  measured improvements, remaining causes, and regressions.
+- [Chunkah #160](https://github.com/coreos/chunkah/issues/160): independent
+  timestamp clamping without changing layer planning or image creation time.
+
+Revisit when Aurora’s relevant stable images include the changes and useful
+before/after results or operational experience are available, or when the user
+prioritizes this work. Upstream normalization does not automatically cover files
+modified afterward by our customization steps. Any future local change still
+needs identical-input and small-source-edit comparisons; database state remains
+separate from filesystem timestamps. No implementation approach is accepted yet.
 
 ## Weekly container builds — 2026-10-15
 

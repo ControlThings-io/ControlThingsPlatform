@@ -55,6 +55,21 @@ for theme in dev.getaurora.aurora.desktop dev.getaurora.auroralight.desktop; do
         "${theme_dir}/contents/plasmoidsetupscripts/org.kde.plasma.folder.js"
 done
 
+# Set only the login wallpaper keys in Aurora's distribution defaults. Local
+# /etc/plasmalogin.conf settings retain precedence. Fail if the expected base
+# configuration or bundled wallpaper is missing rather than creating a partial
+# defaults file after an upstream layout change.
+login_defaults=/usr/lib/plasmalogin/defaults.conf
+login_wallpaper=/usr/share/wallpapers/CT-Aquila-Aurea-Machina
+test -f "$login_defaults"
+test -r "$login_wallpaper/metadata.json"
+test -r "$login_wallpaper/contents/images/16x9.png"
+for key in Image PreviewImage; do
+    kwriteconfig6 --file "$login_defaults" \
+        --group Greeter --group Wallpaper --group org.kde.image --group General \
+        --key "$key" "file://${login_wallpaper}/"
+done
+
 # Use a COPR Example:
 #
 # dnf5 -y copr enable ublue-os/staging

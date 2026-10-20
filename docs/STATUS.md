@@ -1,6 +1,6 @@
 # Current status
 
-Shared main status. VMDK/format selection work on 2026-10-19 starts at `cd57dc9`;
+Shared main status. Layer investigation on 2026-10-19 starts at `4e88610`;
 earlier application/image evidence below retains its historical scope.
 [Decisions](DECISIONS.md) records accepted choices; [DEVELOPMENT.md](../DEVELOPMENT.md)
 has build instructions. Variant-only work belongs in `docs/<branch>/STATUS.md`
@@ -8,8 +8,45 @@ and `DECISIONS.md`, not these shared files.
 
 ## Current work
 
+- README policy clarified on 2026-10-20: repository instructions now require
+  explicit approval for any README edit, with suggestions only until approved.
+  Its scope is marketing and user help. The unapproved wallpaper addition was
+  reverted; README matches HEAD. Development guidance remains in DEVELOPMENT
+  and decisions in DECISIONS. Content and whitespace review passed.
+
+- Implemented the Plasma Login Manager default background change to Aquila Aurea
+  Machina on 2026-10-20 (uncommitted; based on `d84ff91`). The build updates only
+  `Image` and `PreviewImage` in Aurora's `/usr/lib/plasmalogin/defaults.conf`, using
+  the existing wallpaper package, with required-file/asset guards. Administrator
+  overrides in `/etc/plasmalogin.conf` retain precedence. User-supplied VM output
+  established Plasma Login Manager 6.7.5, Aurora's existing wallpaper defaults,
+  and no local wallpaper override; it does not validate this change.
+  Isolated execution of the build block with real `kwriteconfig6`/`kreadconfig6`
+  passed for both keys, preservation of other greeter/wallpaper/autologin settings,
+  repeated application, and failure before mutation when the defaults file or
+  wallpaper assets are absent. Bash syntax and whitespace checks passed. No image
+  build, remote CI or graphical guest validation was performed. Next: deploy a
+  rebuilt image and verify boot/login, logout, display cropping, local override
+  precedence and persistence across an image update. See
+  [configuration and validation](../DEVELOPMENT.md#default-login-screen-background).
+
+- Completed the same-commit `0ae7fc9` image investigation: exact supplied digests
+  share 232/256 layers; 24 replacements total 604,756,457 compressed bytes while
+  total compressed size grows only 312 bytes. All 48 changed old/new blobs were
+  SHA-256 verified and their tar payloads/metadata compared. Twenty-one layers
+  (468,508,962 bytes) differ only in mtimes; the other three contain RPM/DNF
+  bookkeeping changes. Same base layers, 2,599 package identities, CyberChef
+  archive and Chunkah grouping; RPM changes are 12 install-time/transaction-time
+  header pairs and DNF logical changes are transaction timestamps only. No
+  runtime/build changes were made. See [evidence and deferred follow-up](DECISIONS.md#same-commit-layer-investigation--2026-10-19).
+  Deferred by user direction on 2026-10-19: keep timestamp normalization and
+  database isolation on the upstream watch list. Review Aurora’s adoption,
+  measured results, and regressions before revisiting a local implementation;
+  tracking links and revisit criteria are in the decision entry. This is a
+  project watch-list item, not a scheduled background monitor.
+
 - Added AMD64 VMDK assembly for VMware Workstation and independent QCOW2/ISO/VMDK
-  workflow checkboxes (uncommitted). QCOW2 alone defaults on; empty selections
+  workflow checkboxes (`4e88610`). QCOW2 alone defaults on; empty selections
   and ARM64 VMDK fail before preparation. All selected outputs reuse the same
   application payload, with native builder output, checksums, metadata, and
   optional S3 uploads. QCOW2/VMDK share Btrfs and the 64 GiB root minimum.

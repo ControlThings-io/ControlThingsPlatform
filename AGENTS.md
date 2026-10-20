@@ -11,8 +11,12 @@
 - Keep STATUS concise: current state, evidence, gaps, blockers, and next steps.
   Replace stale entries; use Git for detailed history. DECISIONS records accepted
   choices, rationale, superseded alternatives, and unresolved proposals distinctly.
-- Keep user usage in `README.md`, build/customization details in `DEVELOPMENT.md`,
-  and implementation contracts in code docstrings. Follow `RELEASE_CHECKLIST.md`
+- Treat `README.md` as approval-only: suggest changes, but never edit it without
+  explicit user approval for the README change. General implementation or
+  documentation requests do not authorize README edits. Its scope is marketing
+  and user help; development decisions and implementation details belong elsewhere.
+- Keep build/customization details in `DEVELOPMENT.md` and implementation
+  contracts in code docstrings. Follow `RELEASE_CHECKLIST.md`
   if present when releasing; do not infer publication from local checks.
 - Preserve unrelated changes. Leave work uncommitted unless asked; suggest a
   Conventional Commit message. Push only when explicitly requested.
