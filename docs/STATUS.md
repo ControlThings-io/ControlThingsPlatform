@@ -8,6 +8,28 @@ and `DECISIONS.md`, not these shared files.
 
 ## Current work
 
+- README policy clarified on 2026-10-20: repository instructions now require
+  explicit approval for any README edit, with suggestions only until approved.
+  Its scope is marketing and user help. The unapproved wallpaper addition was
+  reverted; README matches HEAD. Development guidance remains in DEVELOPMENT
+  and decisions in DECISIONS. Content and whitespace review passed.
+
+- Implemented the Plasma Login Manager default background change to Aquila Aurea
+  Machina on 2026-10-20 (uncommitted; based on `d84ff91`). The build updates only
+  `Image` and `PreviewImage` in Aurora's `/usr/lib/plasmalogin/defaults.conf`, using
+  the existing wallpaper package, with required-file/asset guards. Administrator
+  overrides in `/etc/plasmalogin.conf` retain precedence. User-supplied VM output
+  established Plasma Login Manager 6.7.5, Aurora's existing wallpaper defaults,
+  and no local wallpaper override; it does not validate this change.
+  Isolated execution of the build block with real `kwriteconfig6`/`kreadconfig6`
+  passed for both keys, preservation of other greeter/wallpaper/autologin settings,
+  repeated application, and failure before mutation when the defaults file or
+  wallpaper assets are absent. Bash syntax and whitespace checks passed. No image
+  build, remote CI or graphical guest validation was performed. Next: deploy a
+  rebuilt image and verify boot/login, logout, display cropping, local override
+  precedence and persistence across an image update. See
+  [configuration and validation](../DEVELOPMENT.md#default-login-screen-background).
+
 - Completed the same-commit `0ae7fc9` image investigation: exact supplied digests
   share 232/256 layers; 24 replacements total 604,756,457 compressed bytes while
   total compressed size grows only 312 bytes. All 48 changed old/new blobs were

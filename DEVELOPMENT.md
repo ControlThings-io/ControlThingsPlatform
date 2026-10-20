@@ -168,6 +168,25 @@ choose another background in Plasma's Screen Locking settings and verify that
 the choice survives another lock and a logout/login. This does not change the
 login screen shown before signing in, or locking and password requirements.
 
+## Default login-screen background
+
+The Plasma Login Manager login screen defaults to **Aquila Aurea Machina**.
+[`build_files/build.sh`](build_files/build.sh) updates only `Image` and
+`PreviewImage` in the `[Greeter][Wallpaper][org.kde.image][General]` group of
+Aurora's `/usr/lib/plasmalogin/defaults.conf`, preserving other inherited settings.
+Both values select `file:///usr/share/wallpapers/CT-Aquila-Aurea-Machina/`.
+The build requires the inherited defaults file and bundled wallpaper assets.
+
+Administrator settings in `/etc/plasmalogin.conf` take precedence. Existing
+installations that inherit the distribution default receive it through an image
+update and reboot. To select another bundled wallpaper, change `login_wallpaper`
+and its asset checks in the build script. Desktop and lock-screen settings are
+configured separately as described above.
+
+After deployment, verify the initial login screen and logout screen, cropping on
+normal and ultrawide displays, and persistence across an image update. Also check
+that an explicit local wallpaper override continues to take precedence.
+
 ## Terminal MOTD default
 
 New users start with Aurora's terminal message of the day disabled. The image

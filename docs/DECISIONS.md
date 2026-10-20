@@ -13,6 +13,12 @@ material. Keep the shared documents aligned with main to reduce merge conflicts.
 README is the project overview and user guide; DEVELOPMENT holds the former
 README's build/customization instructions. Repository routing is in [AGENTS.md](../AGENTS.md).
 
+Clarified by user direction on 2026-10-20: README contains marketing and user help
+only. Agents may suggest README changes but must obtain explicit approval for
+the README edit before applying it; general implementation/documentation requests
+do not grant that approval. Development decisions belong here and customization
+details in DEVELOPMENT.
+
 ## Explicit application selection — 2026-10-17
 
 Prepare only the custom [Brewfile](../system_files/usr/share/ublue-os/homebrew/controlthings.Brewfile),
@@ -148,6 +154,22 @@ are absent. Login-screen and installer branding are separate work.
 Use `CT-Aquila-Aurea-Machina` through Aurora's system-default KDE profile, superseding
 the initial assumption that it should match the desktop. User preferences take
 precedence. Keep authentication, lock timing, and the login screen unchanged.
+
+## Default login-screen background — 2026-10-20
+
+Accepted: use `CT-Aquila-Aurea-Machina` for the Plasma Login Manager login screen.
+The user confirmed Aurora's `plasma-login-manager-6.7.5-1.fc44.x86_64` uses
+`/usr/lib/plasmalogin/defaults.conf` with the image wallpaper plugin; their local
+`/etc/plasmalogin.conf` has no wallpaper override. SDDM theme configuration does
+not apply to this deployed login manager.
+
+Update only the distribution's `Image` and `PreviewImage` keys using KConfig's
+writer, preserving other inherited settings and administrator overrides under
+`/etc`. Select the existing wallpaper package instead of duplicating images.
+Fail the build if the defaults file or required wallpaper assets are missing.
+This supersedes the previous choice to leave login-screen branding unchanged;
+desktop and lock-screen configuration retain their separate mechanisms. See
+[configuration and validation](../DEVELOPMENT.md#default-login-screen-background).
 
 ## Chunkah rechunking — 2026-10-15
 
