@@ -65,11 +65,16 @@ first-run speedup is not promised. Dependency preflight is metadata-only.
 
 ## Disk workflow and update channels — 2026-10-15
 
-Manual disk builds offer QCOW2 (default), ISO, or both on native AMD64/ARM64
-runners. A matching source architecture must exist; container CI publishes AMD64
+Manual disk builds offer independent QCOW2 (default on), ISO, and VMDK
+checkboxes as of 2026-10-19, superseding the single format/both selector.
+ISO/QCOW2 use native AMD64/ARM64 runners; VMDK targets AMD64 VMware Workstation. A matching source architecture must exist; container CI publishes AMD64
 only. Use the pinned image-builder CLI and a separate pinned Fedora 44 Anaconda
 installer; legacy local Justfile disk recipes remain unmigrated and unbundled.
-QCOW2 retains Btrfs with a 64 GiB root minimum.
+QCOW2 and VMDK retain Btrfs with a 64 GiB root minimum. VMDK uses native
+image-builder output and the same retained payload and provenance handling.
+The user will supply VM configurations separately and manually test Workstation;
+OVA packaging is outside this change. Empty selections and ARM64 VMDK fail
+before preparation. Existing CLI preflight `both` remains an ISO/QCOW2 alias.
 
 Resolve the source once. Derive filename date/hash from its version label and
 record actual digests because same-day tags may be reused and revision labels

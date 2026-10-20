@@ -93,7 +93,7 @@ with patch.object(disk, 'run', return_value='{"manifests": []}'):
 
 with tempfile.TemporaryDirectory(prefix='ct-payload-reuse-') as temporary:
     root = Path(temporary)
-    for kind in ('qcow2', 'iso'):
+    for kind in ('qcow2', 'iso', 'vmdk'):
         output = root / kind
         calls = []
 
@@ -118,6 +118,8 @@ with tempfile.TemporaryDirectory(prefix='ct-payload-reuse-') as temporary:
         assert ('sudo', 'podman', 'tag', reference, metadata['update_ref']) in calls
         image_builder = next(cmd for cmd in calls if '--bootc-ref' in cmd)
         assert '--bootc-pull-container' not in image_builder
+        assert image_builder[image_builder.index('build') + 1] == (
+            'bootc-generic-iso' if kind == 'iso' else kind)
         saved = json.loads(next(output.glob('*.source.json')).read_text())
         assert saved['payload_ref'] == reference
         assert saved['update_ref'] == metadata['update_ref']
@@ -219,10 +221,13 @@ with patch.object(disk, 'run', return_value=json.dumps({'Architecture': 'amd64',
     disk.preflight(metadata, 'qcow2')
     assert commands.call_count == 1
     assert commands.call_args.args[-1] == 'docker://' + metadata['builder_ref']
-with patch.object(disk, 'run', return_value=json.dumps({'Architecture': 'amd64', 'Os': 'linux'})) as commands:
-    disk.preflight(metadata, 'both')
-    assert commands.call_count == 2
-    assert 'fedora-bootc' in commands.call_args.args[-1]
+for selection in ('both', ['qcow2', 'iso', 'vmdk'], ['iso', 'iso'], ['vmdk'], ['qcow2', 'vmdk']):
+    with patch.object(disk, 'run', return_value=json.dumps({'Architecture': 'amd64', 'Os': 'linux'})) as commands:
+        disk.preflight(metadata, selection)
+        has_iso = selection == 'both' or 'iso' in selection
+        assert commands.call_count == (2 if has_iso else 1)
+        if has_iso:
+            assert 'fedora-bootc' in commands.call_args.args[-1]
 
 with patch.object(disk, 'run', return_value=json.dumps({'Architecture': 'amd64', 'Os': 'linux'})) as commands:
     tagged = {**metadata, 'builder_ref': metadata['builder_ref'].replace('@', ':latest@')}
@@ -237,4 +242,4 @@ with patch.object(disk, 'run', return_value=json.dumps({'Architecture': 'arm64',
     else:
         raise AssertionError('Wrong builder platform accepted')
 
-print('PASS retained payload identity, provenance, publication failures, digest-only reuse, both assembly formats and preflight')
+print('PASS retained payload identity, provenance, publication failures, digest-only reuse, all assembly formats and preflight')

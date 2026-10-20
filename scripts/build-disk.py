@@ -2,13 +2,14 @@
 """Resolve and build disk inputs with moving update channels on native runners.
 
 Usage: build-disk.py resolve IMAGE TAG BUILDER OUTPUT_JSON [--arch {amd64,arm64}]
-       build-disk.py build INPUT_JSON {iso,qcow2} OUTPUT_DIR
+       build-disk.py build INPUT_JSON {iso,qcow2,vmdk} OUTPUT_DIR
        build-disk.py prepare INPUT_JSON OUTPUT_JSON --tag run-RUNID-ATTEMPT-ARCH
        build-disk.py reuse INPUT_JSON PAYLOAD_DIGEST_REF OUTPUT_JSON
-       build-disk.py preflight INPUT_JSON {iso,qcow2,both}
+       build-disk.py preflight INPUT_JSON {iso,qcow2,vmdk,both} [...]
+       build-disk.py formats --arch ARCH --qcow2 BOOL --iso BOOL --vmdk BOOL
 
 Requires Skopeo for resolution and sudo/Podman for builds. Resolution inspects
-immutable metadata after selecting a digest; both matrix jobs consume that JSON.
+immutable metadata after selecting a digest; all selected jobs consume that JSON.
 Preparation populates a disk-only image's /var with Homebrew and Flatpaks.
 CI retains it in a separate registry package, then assembly pulls that digest
 and gives it the channel name in local storage. The OS and
@@ -29,6 +30,21 @@ import subprocess
 import uuid
 
 ARCHITECTURES = {"amd64": "x86_64", "arm64": "aarch64"}
+FORMATS = ("qcow2", "iso", "vmdk")
+
+
+def validate_formats(kinds: list[str], architecture: str) -> None:
+    """Reject empty/unknown selections and ARM64 VMDK before payload work.
+
+    VMDK targets VMware Workstation on AMD64; ARM64 remains available for ISO
+    and QCOW2. This validates our supported targets, not builder capabilities.
+    """
+    if architecture not in ARCHITECTURES:
+        raise ValueError("Architecture must be amd64 or arm64")
+    if not kinds or any(kind not in FORMATS for kind in kinds):
+        raise ValueError("Select at least one output: qcow2, iso, or vmdk")
+    if "vmdk" in kinds and architecture != "amd64":
+        raise ValueError("VMDK targets VMware Workstation and requires amd64")
 
 
 def run(*args: str, capture: bool = False) -> str:
@@ -237,14 +253,21 @@ def load_payload(metadata: dict[str, str]) -> tuple[str, dict]:
     return payload_id, tools
 
 
-def preflight(metadata: dict[str, str], kind: str) -> None:
+def preflight(metadata: dict[str, str], kinds: str | list[str]) -> None:
     """Check builder/installer availability before expensive application work.
 
     Checks only registry metadata, not layer downloads or runner capacity.
+    Accept one format or a list; legacy "both" expands to ISO plus QCOW2.
     ISO uses the pinned FROM reference in our installer Containerfile.
     """
+    # Retain the legacy CLI's "both" alias for ISO plus QCOW2.
+    if isinstance(kinds, str):
+        kinds = [kinds]
+    if "both" in kinds:
+        kinds = [kind for kind in kinds if kind != "both"] + ["iso", "qcow2"]
+    validate_formats(kinds, metadata["architecture"])
     refs = [metadata["builder_ref"]]
-    if kind in ("iso", "both"):
+    if "iso" in kinds:
         installer = TOOLS_CONTEXT.parent / "installer/Containerfile"
         refs.append(next(line.split()[1] for line in installer.read_text().splitlines()
                          if line.startswith("FROM ")))
@@ -321,10 +344,7 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
     No application installers run when consuming a retained payload.
     """
     architecture = metadata["architecture"]
-    if architecture not in ARCHITECTURES:
-        raise ValueError("Architecture must be amd64 or arm64")
-    if kind not in ("iso", "qcow2"):
-        raise ValueError("Format must be iso or qcow2")
+    validate_formats([kind], architecture)
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     if any(output.iterdir()):
@@ -334,7 +354,7 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
         payload_id, tools = load_payload(metadata)
     else:
         payload_id, tools = prepare(metadata, output)
-    image_type, bootc_ref = "qcow2", channel
+    image_type, bootc_ref = kind, channel
     name = f'{metadata["image"].rsplit("/", 1)[-1]}-{metadata["source_tag"]}-{architecture}'
     # Preserve accurate filenames when assembling retained historical smoke payloads.
     # Current ControlThings bundles use the standard name without a smoke suffix.
@@ -389,7 +409,7 @@ def main() -> None:
     selection.add_argument("--arch", choices=ARCHITECTURES, default="amd64")
     disk = commands.add_parser("build")
     disk.add_argument("metadata", type=Path)
-    disk.add_argument("kind", choices=("iso", "qcow2"))
+    disk.add_argument("kind", choices=FORMATS)
     disk.add_argument("output", type=Path)
     preparation = commands.add_parser("prepare")
     preparation.add_argument("metadata", type=Path)
@@ -401,8 +421,21 @@ def main() -> None:
     reuse.add_argument("output", type=Path)
     check = commands.add_parser("preflight")
     check.add_argument("metadata", type=Path)
-    check.add_argument("kind", choices=("iso", "qcow2", "both"))
+    check.add_argument("kind", nargs="+", choices=(*FORMATS, "both"))
+    formats = commands.add_parser("formats", help="Validate checkboxes and emit a JSON matrix")
+    formats.add_argument("--arch", choices=ARCHITECTURES, default="amd64")
+    for kind in FORMATS:
+        formats.add_argument(f"--{kind}", choices=("true", "false"), required=True)
     args = parser.parse_args()
+    if args.command == "formats":
+        kinds = [kind for kind in FORMATS if getattr(args, kind) == "true"]
+        validate_formats(kinds, args.arch)
+        matrix = json.dumps(kinds)
+        print(matrix)
+        if "GITHUB_OUTPUT" in os.environ:
+            with open(os.environ["GITHUB_OUTPUT"], "a") as stream:
+                stream.write(f"formats={matrix}\n")
+        return
     if args.command == "resolve":
         metadata = resolve(args.image, args.tag, args.builder, args.arch)
         Path(args.output).write_text(json.dumps(metadata, indent=2) + "\n")

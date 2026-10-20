@@ -1,6 +1,6 @@
 # Current status
 
-Shared main status. Flatpak authorization work on 2026-10-19 starts at `0ae7fc9`;
+Shared main status. VMDK/format selection work on 2026-10-19 starts at `cd57dc9`;
 earlier application/image evidence below retains its historical scope.
 [Decisions](DECISIONS.md) records accepted choices; [DEVELOPMENT.md](../DEVELOPMENT.md)
 has build instructions. Variant-only work belongs in `docs/<branch>/STATUS.md`
@@ -8,7 +8,26 @@ and `DECISIONS.md`, not these shared files.
 
 ## Current work
 
-- Removed the manual tool installer's `pkexec` wrapper (uncommitted). System
+- Added AMD64 VMDK assembly for VMware Workstation and independent QCOW2/ISO/VMDK
+  workflow checkboxes (uncommitted). QCOW2 alone defaults on; empty selections
+  and ARM64 VMDK fail before preparation. All selected outputs reuse the same
+  application payload, with native builder output, checksums, metadata, and
+  optional S3 uploads. QCOW2/VMDK share Btrfs and the 64 GiB root minimum.
+  The workflow's old `format` input is replaced by boolean inputs; local CLI
+  preflight retains `both` as an ISO/QCOW2 alias. VM configuration and manual
+  Workstation tests are owned by the user; OVA packaging is not included.
+  Disk orchestration and retained-payload regressions passed with external
+  commands mocked, including all 16 format/architecture selections, VMDK native
+  target/naming/checksums, reuse without preparation, and failure propagation.
+  Workflow shell syntax and whitespace checks passed. Registry inspection and
+  execution of the pinned builder (`9a16a7085eb7…`) succeeded; its generic image
+  listing includes VMDK, but does not expose bootc targets. This does not validate
+  the bootc/Btrfs configuration. No VMDK image, remote CI run, or Workstation boot
+  has been validated. Next: build VMDK from a
+  current source (or matching retained payload), then manually verify boot,
+  apps, offline operation, and persistence across an OS update.
+
+- Removed the manual tool installer's `pkexec` wrapper (`cd57dc9`). System
   Flatpak remote/install commands now run as the Brew owner through native
   authorization, matching the user's reported password-free Aurora behavior.
   The CLI's `install-flatpaks` action also accepts normal users. ZAP's manual

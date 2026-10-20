@@ -23,7 +23,8 @@ App selection varies by source revision and architecture; ZAP is AMD64-only.
 
 ## Getting an image
 
-ISO installers and QCOW2 VM disks are produced by the manual
+ISO installers, QCOW2 VM disks, and AMD64 VMDK disks for VMware Workstation
+are produced by the manual
 [Build disk images workflow](https://github.com/ControlThings-io/ControlThingsPlatform/actions/workflows/build-disk.yml).
 Download the desired artifact from a successful run and verify its checksum:
 
@@ -31,7 +32,10 @@ Download the desired artifact from a successful run and verify its checksum:
 sha256sum -c FILENAME.sha256
 ```
 
-Use QCOW2 for a virtual machine or the ISO to install onto a target disk. The
+Select one or more format checkboxes when dispatching the workflow; QCOW2 is
+selected by default. Use QCOW2 for QEMU/KVM, VMDK for a separately configured
+VMware Workstation VM, or the ISO to install onto a target disk. VMDK generation
+and Workstation boot validation are pending; see [current status](docs/STATUS.md). The
 included `.source.json` identifies the source OS, channel, and application payload.
 Main follows `latest`; course images follow their own channel, such as `ics410_l01`.
 
