@@ -120,10 +120,14 @@ with patch.object(github_api, 'build_opener', return_value=Mock(open=open_respon
         sudo = mock / 'sudo'
         sudo.write_text('#!/bin/bash\n'
                         '[[ $1 == -n && $2 == -H && $3 == -u && '
-                        '$4 == ics410-workbook-update && $5 == -- ]] || exit 99\n'
+                        '$4 == ics410-workbook-update && $5 == -- && $6 == /bin/bash ]] || exit 99\n'
                         'shift 5; exec "$@"\n')
         sudo.chmod(0o755)
         launcher.write_text(launcher.read_text().replace(str(sandbox / 'usr/bin/sudo'), str(sudo)))
+        # Reproduce the guest failure: Git restores the tracked non-executable mode.
+        subprocess.run(['git', '-C', str(checkout), 'reset', '--hard'],
+                       check=True, capture_output=True)
+        assert (checkout / layout / 'workbook-update.sh').stat().st_mode & 0o777 == 0o644
         result = subprocess.run([str(link), '-verbose', 'argument with spaces', '; echo unsafe'],
                                 capture_output=True, text=True)
         assert result.returncode == 23, result.stderr
@@ -131,8 +135,11 @@ with patch.object(github_api, 'build_opener', return_value=Mock(open=open_respon
         assert result.stderr == 'updater stderr\n'
         policy = sandbox / 'etc/sudoers.d/ics410-workbook-update'
         assert policy.stat().st_mode & 0o777 == 0o440
-        assert policy.read_text() == (f'ALL ALL=(ics410-workbook-update) '
-            f'NOPASSWD: NOSETENV: {checkout}/{layout}/workbook-update.sh\n')
+        assert policy.read_text() == ''.join(
+            f'ALL ALL=(ics410-workbook-update) NOPASSWD: NOSETENV: '
+            f'/bin/bash {checkout}/{layout}/workbook-update.sh{options}\n'
+            for options in ('', ' -verbose', ' -debuglog',
+                            ' -verbose -debuglog', ' -debuglog -verbose'))
         assert not (sandbox / 'usr/share/ics410-workbook').exists()
         assert not (sandbox / 'usr/lib/systemd/system/ewb-update.service.d').exists()
         assert (root / 'cron').read_text().splitlines() == [

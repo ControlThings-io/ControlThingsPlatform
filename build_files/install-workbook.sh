@@ -55,15 +55,18 @@ install -d /usr/libexec /etc/sudoers.d
 cat > /usr/libexec/ics410-workbook-update <<CONF
 #!/bin/bash
 # Run the upstream updater as its owner. Pass arguments and output unchanged;
-# concurrency and option semantics belong to the upstream script.
-exec /usr/bin/sudo -n -H -u $account -- $resources/workbook-update.sh "\$@"
+# Bash tolerates Git restoring mode 0644; sudo permits only supported flags.
+# Concurrency and option semantics belong to the upstream script.
+exec /usr/bin/sudo -n -H -u $account -- /bin/bash $resources/workbook-update.sh "\$@"
 CONF
 chmod 0755 /usr/libexec/ics410-workbook-update
 ln -s /usr/libexec/ics410-workbook-update /usr/bin/workbook-update
-# A command without an argument restriction permits upstream script options,
-# but grants neither a shell nor other commands as the updater account.
-printf 'ALL ALL=(%s) NOPASSWD: NOSETENV: %s/workbook-update.sh\n' \
-    "$account" "$resources" > /etc/sudoers.d/ics410-workbook-update
+# Exact Bash argument forms authorize only this script and its supported flags.
+# Never authorize Bash without arguments or with a wildcard script path.
+for options in "" " -verbose" " -debuglog" " -verbose -debuglog" " -debuglog -verbose"; do
+    printf 'ALL ALL=(%s) NOPASSWD: NOSETENV: /bin/bash %s/workbook-update.sh%s\n' \
+        "$account" "$resources" "$options"
+done > /etc/sudoers.d/ics410-workbook-update
 chmod 0440 /etc/sudoers.d/ics410-workbook-update
 visudo -cf /etc/sudoers.d/ics410-workbook-update
 # Use the upstream unit unchanged, including ExecStart and its boot ordering.

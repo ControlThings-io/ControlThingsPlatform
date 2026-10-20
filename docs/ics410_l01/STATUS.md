@@ -1,13 +1,21 @@
 # ICS410 L01 current status
 
-## Current work — 2026-10-19
+## Current work — 2026-10-20
 
 Workbook simplification is committed as `6a5f8c2`; main's authentication and
-reliability changes were merged as `39504c2`. Workbook API authentication is now
-implemented locally and uncommitted. Shared history remains in
+reliability changes were merged as `39504c2`. Workbook API authentication is committed as `e24710a`. Shared history remains in
 [shared status](../STATUS.md); accepted course choices are in
 [course decisions](DECISIONS.md).
 
+- Implemented explicit Bash invocation in the user launcher (uncommitted).
+  Sudoers allows the exact script with no flags, either supported flag, or both
+  orders. Guest evidence: direct invocation failed at mode 0644; chmod allowed
+  one successful update, which restored 0644. The supplied upstream script runs
+  Git reset before checking for updates. Regression fixtures reproduce that reset
+  and verify Bash execution, output/status forwarding and exact policy generation
+  for both resource layouts. Workbook checks, real visudo syntax validation,
+  Bash syntax and whitespace review passed locally. Sudo execution remains mocked;
+  real VM authorization, repeated updates and flag combinations remain pending.
 - Reconciled the authentication stash with the merged shared implementation.
   The workbook build step now mounts `github_token` and uses the shared API
   helper for GitHub SSH host-key metadata. The API token is temporary; the
@@ -29,18 +37,20 @@ implemented locally and uncommitted. Shared history remains in
 - Removed the platform `ewb-update.service` override. The upstream service remains
   linked and unchanged. Upstream must correct its ExecStart redirection and paths;
   required settings are in [course development](DEVELOPMENT.md#changes-required-in-the-workbook-repository).
-  User reports the upstream service updated; deployed paths and executable mode
-  still need guest verification. Private upstream files were not inspected here.
+  User reports the upstream service updated; deployed paths still need guest
+  verification. The user supplied the updater script for the current diagnosis.
 - `/usr/bin/workbook-update` now links to a root-owned launcher using passwordless,
-  noninteractive sudo for only the upstream script as `ics410-workbook-update`.
+  noninteractive sudo for Bash with only the upstream script as
+  `ics410-workbook-update` and the supported flag combinations.
   Arguments, stdout, stderr and exit status pass through. The complete `.git`
   directory remains in the checkout; credentials and metadata retain restricted
-  ownership. Cron/systemd run the upstream script directly. Concurrency belongs
+  ownership. Cron/systemd should invoke the upstream script through Bash. Concurrency belongs
   upstream, with no platform lock.
 - Renamed the platform web unit to `ewb-webserver.service`. It still serves
   `/var/lib/ics410/workbook` at IPv4 localhost port 80 as a separate web account.
 - The updater's executable correction was committed as `8f3b701`; build-time chmod
-  remains. Commit its executable bit upstream too so Git updates retain it.
+  remains. The user launcher now tolerates Git restoring mode 0644; direct
+  callers still need the upstream executable bit or explicit Bash invocation.
 - Firefox homepage remains `http://localhost/` (`5934cee`), with inherited editable
   shortcuts/defaults. Course remains on normal Aurora stable with existing RPM
   selections and OS automatic-update defaults disabled.
@@ -103,8 +113,9 @@ this change does not migrate them or repair their checkouts or credentials.
 
 ## Next steps
 
-- Commit/push workbook API authentication when authorized, then validate both
-  API lookups in a container build. Build a fresh course disk and complete the
+- Validate both API lookups in a container build. Verify the new launcher in a VM
+  with script mode 0644, all five permitted flag forms and rejection of unknown
+  flags; run two successive updates. Build a fresh course disk and complete the
   guest checks above, including the user-reported upstream service correction.
 
 - Build the course OS container and prepare a fresh disk payload from that source;

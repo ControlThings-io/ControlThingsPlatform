@@ -65,9 +65,11 @@ access credentials or `.git`.
 Any local user can run `workbook-update`, with optional upstream arguments such
 as `-verbose`, without a password. `/usr/bin/workbook-update` links to the root-owned
 `/usr/libexec/ics410-workbook-update` launcher. It uses noninteractive sudo to run
-only the discovered upstream `workbook-update.sh` as `ics410-workbook-update`.
-The sudo rule permits script arguments, grants no environment override privilege,
-and grants no other commands. Arguments, stdout, stderr and exit status pass
+the discovered upstream `workbook-update.sh` through `/bin/bash` as
+`ics410-workbook-update`, even when Git restores script mode 0644.
+Sudoers permits exactly five argument forms: no flags, `-verbose`, `-debuglog`,
+and both flags in either order. Other arguments and repeated flags are no longer
+authorized. It grants no environment override privilege or other commands. Arguments, stdout, stderr and exit status pass
 through; the launcher adds no logging, redirection or locking. Upstream controls
 option handling and concurrency between users, cron and systemd. Its destructive
 update policy applies to manual invocations too.
@@ -91,14 +93,16 @@ Keep the upstream boot enablement, for example `WantedBy=multi-user.target` in
 `[Install]`. Do not depend on `ics410-workbook-init.service`.
 
 Ensure paths inside the script and cron file use `/var/lib/ics410/workbook`.
-Cron and systemd should invoke the upstream script directly as the updater
-account, rather than calling the user launcher. Commit the script's executable
-bit upstream (`git update-index --chmod=+x <path-to-workbook-update.sh>`) so Git
-updates retain it. The platform also sets it executable during image creation.
+Cron and systemd should invoke the upstream script through `/bin/bash` as the
+updater account, rather than calling the user launcher. Commit the script's executable
+bit upstream (`git update-index --chmod=+x <path-to-workbook-update.sh>`) if
+other callers execute it directly. The platform sets it executable during image
+creation, but the user launcher no longer relies on that mode.
 Implement any concurrency protection inside the upstream script.
 
-The private upstream files were not available for this revision's review. These
-are required settings, not a verified line-by-line patch to the other repository.
+The user supplied the upstream updater script during diagnosis; its unconditional
+`git reset --hard` explains loss of a locally applied executable bit. The deployed
+cron and service files still need guest verification.
 
 ### Guest checks and operations
 

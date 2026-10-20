@@ -102,3 +102,17 @@ run `39346663938` without changing workbook SSH credentials or runtime updates.
 Shared authentication and download helpers were merged from main in `39504c2`.
 The workbook build step also mounts that temporary API secret and uses the same
 helper; variant-only integration remains on this branch.
+
+
+## Explicit Bash workbook invocation — 2026-10-20
+
+Accepted: the user launcher invokes the upstream script with `/bin/bash` through
+sudo as the updater account. Guest testing showed the script returning to mode
+0644 after an update; the supplied script runs `git reset --hard` unconditionally.
+This supersedes reliance on executable mode for the user launcher.
+
+Authorize exactly the script path with no flags, either `-verbose` or
+`-debuglog`, or both in either order. This narrows the previous unrestricted
+script-argument policy; repeated and unknown flags are not supported. Preserve
+argument forwarding, output and exit status. Keep upstream cron/service ownership;
+their invocation should also use Bash if executable mode is not tracked upstream.
