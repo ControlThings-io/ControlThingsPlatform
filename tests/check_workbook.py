@@ -60,6 +60,28 @@ for layout in ('resources', 'docs/resources'):
             (sandbox / name).mkdir(parents=True, exist_ok=True)
         secret = sandbox / 'run/secrets/workbook_key'
         secret.write_text('fixture-private-key-content')
+        api_token = sandbox / 'run/secrets/github_token'
+        if layout == 'resources':
+            api_token.write_text('fixture-api-token')
+        # Run the real API helper with only its network transport mocked.
+        api_runner = root / 'api_fixture.py'
+        api_runner.write_text(f'''import sys
+sys.dont_write_bytecode = True
+sys.path.insert(0, {str(Path('build_files').resolve())!r})
+from io import BytesIO
+from pathlib import Path
+from unittest.mock import Mock, patch
+import github_api
+assert sys.argv[1] == 'https://api.github.com/meta'
+def open_response(request, timeout):
+    expected = 'Bearer fixture-api-token' if Path({str(api_token)!r}).exists() else None
+    assert request.get_header('Authorization') == expected
+    stream = BytesIO(b'{{"ssh_keys":["ssh-ed25519 fixture"]}}')
+    stream.headers = {{}}
+    return stream
+with patch.object(github_api, 'build_opener', return_value=Mock(open=open_response)):
+    github_api.download(sys.argv[1], Path(sys.argv[2]), Path({str(api_token)!r}))
+''')
         mock = root / 'bin'
         mock.mkdir()
         programs = {
@@ -67,7 +89,6 @@ for layout in ('resources', 'docs/resources'):
             'crontab': 'printf \'%s\\n\' "$@" > "$CRON_LOG"',
             'systemctl': 'printf \'%s\\n\' "$*" >> "$SERVICE_LOG"',
             'runuser': 'while [[ $1 != -- ]]; do shift; done; shift; exec "$@"',
-            'curl': 'while [[ $1 != -o ]]; do shift; done; shift; printf \'{"ssh_keys":["ssh-ed25519 fixture"]}\\n\' > "$1"',
             'install': 'args=(); while (($#)); do case "$1" in -o|-g) shift 2;; *) args+=("$1"); shift;; esac; done; exec /usr/bin/install "${args[@]}"',
             'git': f'if [[ $1 == clone ]]; then shift 2; exec /usr/bin/git clone "{fixture}" "$@"; fi; exec /usr/bin/git "$@"',
         }
@@ -79,11 +100,14 @@ for layout in ('resources', 'docs/resources'):
         # Rewrite image paths; command semantics and real Git/visudo stay intact.
         installer = re.sub(r'/(var|usr|etc|run|tmp)(?=/)',
                            lambda match: str(sandbox) + match.group(0), installer)
+        installer = installer.replace('/ctx/github_api.py', str(api_runner))
         result = subprocess.run(['bash', '-x', '-c', installer], capture_output=True, text=True,
             env=dict(os.environ, PATH=f'{mock}:{os.environ["PATH"]}',
                      CRON_LOG=str(root / 'cron'), SERVICE_LOG=str(root / 'services')))
         assert result.returncode == 0, result.stderr
         assert secret.read_text() not in result.stdout + result.stderr
+        assert 'fixture-api-token' not in result.stdout + result.stderr
+        assert not any('github_token' in path.name for path in (sandbox / 'var').rglob('*'))
         checkout = sandbox / 'var/lib/ics410/workbook'
         assert (checkout / 'index.html').read_text() == 'workbook'
         assert (checkout / '.git').stat().st_mode & 0o777 == 0o700
@@ -127,3 +151,8 @@ assert '/usr/share/ics410-workbook' not in web
 assert not Path('system_files/usr/libexec/ics410-workbook-init').exists()
 assert not Path('system_files/usr/lib/systemd/system/ics410-workbook-init.service').exists()
 assert not Path('system_files/usr/lib/systemd/system/ics410-workbook-web.service').exists()
+
+workbook_step = Path('Containerfile').read_text().split('ARG WORKBOOK_BUILD_EPOCH=manual', 1)[1].split('### LINTING', 1)[0]
+assert '--mount=type=secret,id=workbook_key' in workbook_step
+assert '--mount=type=secret,id=github_token' in workbook_step
+print('PASS workbook metadata uses shared API authentication, optional local token, and both build-secret mounts')

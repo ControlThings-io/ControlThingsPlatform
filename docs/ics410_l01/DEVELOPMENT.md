@@ -21,6 +21,22 @@ the build context:
 sudo env WORKBOOK_SSH_KEY_FILE=/absolute/path/to/workbook-key just build
 ```
 
+The Actions build also uses its automatically supplied `github.token` for public
+GitHub API requests (CyberChef release metadata and workbook SSH host keys).
+The workflow writes a private temporary file, passes it as a Podman secret, and
+removes it on success or failure. The API token is never retained in the image.
+Only `https://api.github.com` receives authentication; redirects are rejected.
+Transient HTTP/network errors retry at most twice, respecting numeric Retry-After and
+rate-limit reset headers up to 60 seconds per wait. Longer backoffs fail so the
+build can be retried later.
+
+Local builds remain anonymous by default. To authenticate, optionally set
+`GITHUB_API_TOKEN_FILE` to a nonempty token file outside the build context alongside
+`WORKBOOK_SSH_KEY_FILE`. Direct Podman builds can supply
+`--secret id=github_token,src=/absolute/path/to/token`. Unlike the workbook deploy
+key, this token is only for build-time API access; it does not change workbook Git
+SSH authentication. Never put token contents in build arguments or repository files.
+
 The key is intentionally retained in the distributed image and VM, as accepted
 for this course. Do not commit it or put it in build arguments. The workflow
 writes a temporary mode-0600 file and removes it when the build step exits.

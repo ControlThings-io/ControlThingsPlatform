@@ -2,23 +2,26 @@
 
 ## Current work — 2026-10-19
 
-Workbook simplification is committed as `6a5f8c2`. The merge from main
-`0ae7fc9` is resolved locally and awaiting a merge commit. Shared history remains
-in [shared status](../STATUS.md); accepted course choices are in
+Workbook simplification is committed as `6a5f8c2`; main's authentication and
+reliability changes were merged as `39504c2`. Workbook API authentication is now
+implemented locally and uncommitted. Shared history remains in
+[shared status](../STATUS.md); accepted course choices are in
 [course decisions](DECISIONS.md).
 
-- Resolved workflow and Justfile conflicts by retaining course deploy-key setup
-  alongside main's temporary GitHub API token. Both secret files are cleaned up
-  on exit; both Podman secret arguments are preserved. CyberChef authentication,
-  download retries and early registry login come from main. Shared documentation
-  matches the merged main revision. The workbook installer and its container
-  step remain unchanged; host-key API authentication is deferred to the next task.
-- Merge checks passed: `tests/check_github_api.py`, `tests/check_http_download.py`,
-  `tests/check_registry_login.py`, `tests/check_cyberchef.py`,
-  `tests/check_workbook.py`, `tests/check_workflow_tags.py`, Just/Bash syntax and
-  whitespace review. Workflow fixtures now supply both credentials and check
-  cleanup/no secret logging. Network/Podman/systemd remain mocked; no new image
-  build or remote CI result is established. The existing course stash is preserved.
+- Reconciled the authentication stash with the merged shared implementation.
+  The workbook build step now mounts `github_token` and uses the shared API
+  helper for GitHub SSH host-key metadata. The API token is temporary; the
+  separately retained workbook SSH deploy key still handles clone/runtime pulls.
+  Local API authentication remains optional. The original stash is retained as
+  a backup; its older shared helper was not restored over main's retry changes.
+- Current checks passed: `tests/check_workbook.py`, `tests/check_github_api.py`,
+  `tests/check_http_download.py`, `tests/check_registry_login.py`,
+  `tests/check_workflow_tags.py`, Just/Bash syntax and whitespace review.
+  Workbook fixtures execute the real API helper with only network transport
+  mocked, checking authenticated and anonymous metadata lookup, both resource
+  layouts, credential separation, output and build-secret mounts. No live
+  authenticated request, private-repository fetch, image build or remote CI run
+  was performed. Prior merge checks also passed CyberChef installation tests.
 
 - Workbook and retained deploy-key credentials are populated only during image
   creation. Removed seed archive creation, boot initialization and its unit.
@@ -100,9 +103,9 @@ this change does not migrate them or repair their checkouts or credentials.
 
 ## Next steps
 
-- Complete the resolved merge, then apply workbook API authentication when
-  requested. Build a fresh course disk and complete the workbook guest checks
-  above, including the user-reported upstream service correction.
+- Commit/push workbook API authentication when authorized, then validate both
+  API lookups in a container build. Build a fresh course disk and complete the
+  guest checks above, including the user-reported upstream service correction.
 
 - Build the course OS container and prepare a fresh disk payload from that source;
   verify its channel remains `ics410_l01`.

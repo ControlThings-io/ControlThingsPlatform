@@ -89,3 +89,16 @@ Accepted: override only `Homepage.URL` to `http://localhost/` in the inherited
 section defaults, and unlocked settings. The browser regression takes its expected
 homepage from the policy to support the course URL. Shared repository guides
 remain unchanged; verify fresh-user startup in the built course guest.
+
+## Build-time GitHub API authentication — 2026-10-19
+
+Accepted: use the Actions job's temporary `github.token` to authenticate public
+API lookups during container builds. Transfer it via a private runner file and
+Podman secret mounts, remove the runner file on exit, and never retain the token
+in the image. Local token files are optional. Share an API-only helper between
+CyberChef metadata and workbook host-key discovery; reject redirects and bound
+HTTP retries/backoff. This addresses the anonymous API rate-limit failure in
+run `39346663938` without changing workbook SSH credentials or runtime updates.
+Shared authentication and download helpers were merged from main in `39504c2`.
+The workbook build step also mounts that temporary API secret and uses the same
+helper; variant-only integration remains on this branch.

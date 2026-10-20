@@ -12,7 +12,7 @@ root=/var/lib/ics410/workbook
 install -d -m 0700 -o "$account" -g "$account" "$home_dir" "$home_dir/.ssh"
 install -m 0600 -o "$account" -g "$account" /run/secrets/workbook_key "$home_dir/.ssh/workbook_key"
 # HTTPS authenticates the published host keys; never trust an unauthenticated scan.
-curl --fail --silent --show-error --retry 3 https://api.github.com/meta -o /tmp/github-meta.json
+python3 /ctx/github_api.py https://api.github.com/meta /tmp/github-meta.json
 python3 - "$home_dir/.ssh/known_hosts" <<'PY'
 import json
 import sys

@@ -50,6 +50,7 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
 ARG WORKBOOK_BUILD_EPOCH=manual
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=secret,id=workbook_key \
+    --mount=type=secret,id=github_token \
     --mount=type=tmpfs,dst=/tmp \
     echo "Refreshing workbook (${WORKBOOK_BUILD_EPOCH})" && \
     bash /ctx/install-workbook.sh
