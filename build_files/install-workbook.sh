@@ -51,16 +51,15 @@ runuser -u "$account" -- git -C "$root" config core.sshCommand "ssh -F $home_dir
 chmod 0755 "$resources/workbook-update.sh"
 # The root-owned launcher selects only this script as the dedicated account.
 # exec preserves arguments, stdout, stderr and the upstream exit status.
-install -d /usr/libexec /etc/sudoers.d
-cat > /usr/libexec/ics410-workbook-update <<CONF
+install -d /usr/bin /etc/sudoers.d
+cat > /usr/bin/workbook-update <<CONF
 #!/bin/bash
 # Run the upstream updater as its owner. Pass arguments and output unchanged;
 # Bash tolerates Git restoring mode 0644; sudo permits only supported flags.
 # Concurrency and option semantics belong to the upstream script.
 exec /usr/bin/sudo -n -H -u $account -- /bin/bash $resources/workbook-update.sh "\$@"
 CONF
-chmod 0755 /usr/libexec/ics410-workbook-update
-ln -s /usr/libexec/ics410-workbook-update /usr/bin/workbook-update
+chmod 0755 /usr/bin/workbook-update
 # Exact Bash argument forms authorize only this script and its supported flags.
 # Never authorize Bash without arguments or with a wildcard script path.
 for options in "" " -verbose" " -debuglog" " -verbose -debuglog" " -debuglog -verbose"; do

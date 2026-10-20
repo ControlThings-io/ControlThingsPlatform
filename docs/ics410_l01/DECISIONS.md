@@ -116,3 +116,10 @@ Authorize exactly the script path with no flags, either `-verbose` or
 script-argument policy; repeated and unknown flags are not supported. Preserve
 argument forwarding, output and exit status. Keep upstream cron/service ownership;
 their invocation should also use Bash if executable mode is not tracked upstream.
+
+## Direct workbook launcher installation — 2026-10-20
+
+Accepted: install the root-owned launcher directly at `/usr/bin/workbook-update`.
+The former symlink to `/usr/libexec/ics410-workbook-update` provided no useful
+separation for this single entry point. Bash invocation and sudo authorization
+remain unchanged.

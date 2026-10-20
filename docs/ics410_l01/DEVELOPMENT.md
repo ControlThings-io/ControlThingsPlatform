@@ -63,8 +63,8 @@ configuration explicitly, including for cron with HOME=/. The web account cannot
 access credentials or `.git`.
 
 Any local user can run `workbook-update`, with optional upstream arguments such
-as `-verbose`, without a password. `/usr/bin/workbook-update` links to the root-owned
-`/usr/libexec/ics410-workbook-update` launcher. It uses noninteractive sudo to run
+as `-verbose`, without a password. `/usr/bin/workbook-update` is the root-owned
+launcher. It uses noninteractive sudo to run
 the discovered upstream `workbook-update.sh` through `/bin/bash` as
 `ics410-workbook-update`, even when Git restores script mode 0644.
 Sudoers permits exactly five argument forms: no flags, `-verbose`, `-debuglog`,

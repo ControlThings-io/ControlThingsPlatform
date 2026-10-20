@@ -7,7 +7,9 @@ reliability changes were merged as `39504c2`. Workbook API authentication is com
 [shared status](../STATUS.md); accepted course choices are in
 [course decisions](DECISIONS.md).
 
-- Implemented explicit Bash invocation in the user launcher (uncommitted).
+- Explicit Bash invocation is committed as `73db909`. The launcher is now
+  installed directly at `/usr/bin/workbook-update` (uncommitted cleanup), replacing
+  the libexec symlink. Checks verify a regular executable file and no libexec copy.
   Sudoers allows the exact script with no flags, either supported flag, or both
   orders. Guest evidence: direct invocation failed at mode 0644; chmod allowed
   one successful update, which restored 0644. The supplied upstream script runs
@@ -39,7 +41,7 @@ reliability changes were merged as `39504c2`. Workbook API authentication is com
   required settings are in [course development](DEVELOPMENT.md#changes-required-in-the-workbook-repository).
   User reports the upstream service updated; deployed paths still need guest
   verification. The user supplied the updater script for the current diagnosis.
-- `/usr/bin/workbook-update` now links to a root-owned launcher using passwordless,
+- `/usr/bin/workbook-update` is a root-owned launcher using passwordless,
   noninteractive sudo for Bash with only the upstream script as
   `ics410-workbook-update` and the supported flag combinations.
   Arguments, stdout, stderr and exit status pass through. The complete `.git`

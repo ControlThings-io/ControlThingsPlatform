@@ -114,9 +114,10 @@ with patch.object(github_api, 'build_opener', return_value=Mock(open=open_respon
         assert (checkout / layout / 'workbook-update.sh').stat().st_mode & 0o777 == 0o755
         key = sandbox / 'var/lib/ics410/workbook-update/.ssh/workbook_key'
         assert key.stat().st_mode & 0o777 == 0o600
-        launcher = sandbox / 'usr/libexec/ics410-workbook-update'
-        link = sandbox / 'usr/bin/workbook-update'
-        assert link.readlink() == sandbox / 'usr/libexec/ics410-workbook-update'
+        launcher = sandbox / 'usr/bin/workbook-update'
+        assert launcher.is_file() and not launcher.is_symlink()
+        assert launcher.stat().st_mode & 0o777 == 0o755
+        assert not (sandbox / 'usr/libexec/ics410-workbook-update').exists()
         sudo = mock / 'sudo'
         sudo.write_text('#!/bin/bash\n'
                         '[[ $1 == -n && $2 == -H && $3 == -u && '
@@ -128,7 +129,7 @@ with patch.object(github_api, 'build_opener', return_value=Mock(open=open_respon
         subprocess.run(['git', '-C', str(checkout), 'reset', '--hard'],
                        check=True, capture_output=True)
         assert (checkout / layout / 'workbook-update.sh').stat().st_mode & 0o777 == 0o644
-        result = subprocess.run([str(link), '-verbose', 'argument with spaces', '; echo unsafe'],
+        result = subprocess.run([str(launcher), '-verbose', 'argument with spaces', '; echo unsafe'],
                                 capture_output=True, text=True)
         assert result.returncode == 23, result.stderr
         assert result.stdout == '-verbose\nargument with spaces\n; echo unsafe\n'
