@@ -23,7 +23,8 @@ App selection varies by source revision and architecture; ZAP is AMD64-only.
 
 ## Getting an image
 
-ISO installers and QCOW2 VM disks are produced by the manual
+ISO installers, QCOW2 VM disks, and AMD64 VMDK disks for VMware Workstation
+are produced by the manual
 [Build disk images workflow](https://github.com/ControlThings-io/ControlThingsPlatform/actions/workflows/build-disk.yml).
 Download the desired artifact from a successful run and verify its checksum:
 
@@ -31,7 +32,10 @@ Download the desired artifact from a successful run and verify its checksum:
 sha256sum -c FILENAME.sha256
 ```
 
-Use QCOW2 for a virtual machine or the ISO to install onto a target disk. The
+Select one or more format checkboxes when dispatching the workflow; QCOW2 is
+selected by default. Use QCOW2 for QEMU/KVM, VMDK for a separately configured
+VMware Workstation VM, or the ISO to install onto a target disk. VMDK generation
+and Workstation boot validation are pending; see [current status](docs/STATUS.md). The
 included `.source.json` identifies the source OS, channel, and application payload.
 Main follows `latest`; course images follow their own channel, such as `ics410_l01`.
 
@@ -55,14 +59,14 @@ as the Homebrew owner (normally the first login user):
 ujust install-controlthings-tools
 ```
 
-This may download packages and requests administrator authorization for system
-Flatpaks. An OS container switch alone does not supply the disk image's app bundle.
+This may download packages. System Flatpaks use Aurora’s normal Flatpak
+authorization without an extra administrator prompt from this helper. An OS container switch alone does not supply the disk image's app bundle.
 
-ZAP receives a system-wide X11 permission workaround during tool installation.
-On an existing installation, apply it once and restart ZAP:
+Disk builds include a system-wide X11 workaround for ZAP. The manual installer
+applies it for the invoking user. Other existing users can apply it and restart ZAP:
 
 ```bash
-sudo flatpak override --system --socket=x11 org.zaproxy.ZAP
+flatpak override --user --socket=x11 org.zaproxy.ZAP
 ```
 
 For capture-group access, run as your normal login user, then log out and back in:

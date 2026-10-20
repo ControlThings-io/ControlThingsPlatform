@@ -1,6 +1,6 @@
 # Current status
 
-Shared main status. API authentication work on 2026-10-19 starts at `e35ccbe`;
+Shared main status. VMDK/format selection work on 2026-10-19 starts at `cd57dc9`;
 earlier application/image evidence below retains its historical scope.
 [Decisions](DECISIONS.md) records accepted choices; [DEVELOPMENT.md](../DEVELOPMENT.md)
 has build instructions. Variant-only work belongs in `docs/<branch>/STATUS.md`
@@ -8,7 +8,38 @@ and `DECISIONS.md`, not these shared files.
 
 ## Current work
 
-- Implemented build-time GitHub API authentication on main (uncommitted). Actions
+- Added AMD64 VMDK assembly for VMware Workstation and independent QCOW2/ISO/VMDK
+  workflow checkboxes (uncommitted). QCOW2 alone defaults on; empty selections
+  and ARM64 VMDK fail before preparation. All selected outputs reuse the same
+  application payload, with native builder output, checksums, metadata, and
+  optional S3 uploads. QCOW2/VMDK share Btrfs and the 64 GiB root minimum.
+  The workflow's old `format` input is replaced by boolean inputs; local CLI
+  preflight retains `both` as an ISO/QCOW2 alias. VM configuration and manual
+  Workstation tests are owned by the user; OVA packaging is not included.
+  Disk orchestration and retained-payload regressions passed with external
+  commands mocked, including all 16 format/architecture selections, VMDK native
+  target/naming/checksums, reuse without preparation, and failure propagation.
+  Workflow shell syntax and whitespace checks passed. Registry inspection and
+  execution of the pinned builder (`9a16a7085eb7…`) succeeded; its generic image
+  listing includes VMDK, but does not expose bootc targets. This does not validate
+  the bootc/Btrfs configuration. No VMDK image, remote CI run, or Workstation boot
+  has been validated. Next: build VMDK from a
+  current source (or matching retained payload), then manually verify boot,
+  apps, offline operation, and persistence across an OS update.
+
+- Removed the manual tool installer's `pkexec` wrapper (`cd57dc9`). System
+  Flatpak remote/install commands now run as the Brew owner through native
+  authorization, matching the user's reported password-free Aurora behavior.
+  The CLI's `install-flatpaks` action also accepts normal users. ZAP's manual
+  X11 override is per-user; disk payload preparation retains its all-user override.
+  Installer regression checks passed for normal-user dispatch, absence of
+  elevation commands, Brew ownership/failure boundaries and architecture filtering.
+  The isolated disk-payload shell regression and whitespace checks also passed.
+  Package commands are mocked; no guest installation was performed. Next: deploy
+  the updated image and verify `ujust install-controlthings-tools` completes
+  without authentication and ZAP launches for the invoking user.
+
+- Implemented build-time GitHub API authentication on main (`0ae7fc9`). Actions
   passes its temporary token through a private file and Podman secret; CyberChef
   uses the API-only helper with redirect rejection and bounded HTTP retries.
   ZIP/license downloads share retries for transient HTTP/network failures and
@@ -26,8 +57,9 @@ and `DECISIONS.md`, not these shared files.
   filesystem failures and registry auth-file export/cleanup. Podman and network
   requests are mocked. CyberChef
   desktop validation emitted only its existing multiple-category hint. No live
-  authenticated request, image build or remote CI run was performed. Next: commit
-  and push when authorized, then verify the container build in Actions. See
+  authenticated request, image build or remote CI run was performed in those local
+  checks. The user reports the new authenticated builds working on 2026-10-19;
+  the tested run identity is unrecorded. See
   [build instructions](../DEVELOPMENT.md#cyberchef-offline-application).
 
 - Added `/etc/skel/Samples` pointing to `/usr/share/controlthings/samples` on

@@ -287,8 +287,8 @@ their dependencies are prepared. The inherited Homebrew bootstrap is retained.
 The manual `ujust install-controlthings-tools` command follows the same Brewfile
 and does not remove applications already installed.
 
-The disk workflow defaults to `format=qcow2`; `iso` and `both` remain explicit
-choices. New bundles record `tools.profile=controlthings` and use standard
+The disk workflow offers independent QCOW2, ISO, and VMDK checkboxes; only
+QCOW2 is selected by default. VMDK targets VMware Workstation on AMD64. New bundles record `tools.profile=controlthings` and use standard
 filenames without a `-smoke` suffix. Reusing an older smoke payload retains its
 original profile and suffix.
 
@@ -305,7 +305,7 @@ defines the apps prepared **only during manual disk-image builds**. Normal
 container builds ship the list and manual installer; they do not download or
 bundle these applications. Aurora's inherited Homebrew bootstrap stays unchanged.
 
-Both disk formats install only the Flatpaks selected in ControlThings' Brewfile,
+All disk formats install only the Flatpaks selected in ControlThings' Brewfile,
 including Bazaar. Aurora's `system-flatpaks.Brewfile` remains excluded, as do
 its optional CLI, fonts and DX bundles. Firefox is installed as an RPM in the
 OS image and opens the bundled CyberChef application.
@@ -319,18 +319,19 @@ to AMD64.
 
 The build checks the native Flathub catalog. Missing selected apps or catalog
 errors fail the build. The ZAP architecture annotation excludes it on ARM64.
-When ZAP is selected, both payload preparation and the manual installer apply
+When ZAP is selected, payload preparation applies
 `flatpak override --system --socket=x11 org.zaproxy.ZAP`. The payload retains
 the override under `/var/lib/flatpak`; normal OS updates do not retrofit it.
+The manual installer applies the same permission with `--user` instead.
 
 The manual disk workflow starts from the selected published container digest
 and its shipped manifest. One preparation job per run/architecture prepares Homebrew under
 `/var/home/linuxbrew/.linuxbrew` and system Flatpaks under `/var/lib/flatpak`,
-including dependencies and extra-data processing. Both ISO and QCOW2 install
+including dependencies and extra-data processing. ISO, QCOW2, and VMDK install
 these populated stores; their apps need no first-boot download or custom seed
 service. Builds require internet access and extra working space. Preparation
 retains its image in the separate GHCR `controlthingsplatform-disk-payload`
-package, under a unique `run-RUNID-ATTEMPT-ARCH` tag. Both formats pull its exact
+package, under a unique `run-RUNID-ATTEMPT-ARCH` tag. All selected formats pull its exact
 digest; installed systems follow the original OS channel. Cache images are
 installer inputs, not supported targets for `bootc switch`.
 Before disk assembly, the script removes only its own labelled, dangling
@@ -351,7 +352,9 @@ ujust install-controlthings-tools
 ```
 
 This installs missing Homebrew formulae without upgrading existing ones, then
-asks for administrator authorization to install missing system Flatpaks. It can
+installs missing system Flatpaks using Aurora’s native Flatpak authorization,
+without wrapping the helper in `pkexec`. ZAP’s X11 override applies to the invoking
+user; disk preparation retains its system-wide override. It can
 download missing packages and does not remove other tools. Continue using
 Homebrew, Flatpak, or Aurora's update tooling for application updates. Installing
 Starship and Zoxide does not automatically change shell configuration.
@@ -360,7 +363,7 @@ Disk artifact source metadata records the original OS digest, the temporary
 payload's local image ID, both manifest checksums, selected package IDs, omitted
 ARM64 defaults, Homebrew versions and Flatpak commits. The same initial metadata is installed at
 `/var/lib/controlthings/tools/installed.json`; it describes disk provisioning,
-not later application updates. QCOW2 uses a 64 GiB root minimum for the populated
+not later application updates. QCOW2 and VMDK use a 64 GiB root minimum for the populated
 stores; measure remaining space after first boot.
 
 The manual `ujust install-controlthings-tools` command installs ControlThings'
@@ -411,20 +414,28 @@ the amount downloaded during an update. Registry access uses Skopeo's existing
 credentials when authentication is required.
 
 The [Build disk images workflow](.github/workflows/build-disk.yml) runs manually
-and builds an interactive ISO installer and a QCOW2 VM disk for the selected
+and builds ISO installers, QCOW2 disks, and VMDK disks for the selected
 **platform**: `amd64` (default) or `arm64`. Builds use native Ubuntu runners.
 Open **Actions → Build disk images → Run workflow**, select the platform and
-**format** (`qcow2` by default, `iso`, or `both`), and supply a
+**QCOW2**, **ISO**, and/or **VMDK** checkboxes (QCOW2 alone by default), and supply a
 published channel (`latest`, `ics410_l01`, or `ics410-l01` if published with that
 spelling), or a dated tag such as `latest-20261015-5118339`. Channel names retain
 their exact spelling; hyphens and underscores are not aliases.
 
-Both format jobs use one prepared application payload for the selected architecture. The filename date
+All selected format jobs use one prepared application payload for the selected architecture. The filename date
 and hash come from the source container version label, never the workflow's
 checkout or the disk generation date. For example:
 
 - `controlthingsplatform-latest-20261015-5118339-amd64-installer.iso`
 - `controlthingsplatform-latest-20261015-5118339-amd64.qcow2`
+- `controlthingsplatform-latest-20261015-5118339-amd64.vmdk`
+
+At least one format must be selected. VMDK is restricted to AMD64 for VMware
+Workstation; selecting ARM64 with VMDK fails before payload preparation. VMDK
+contains the disk only: create and test your VM configuration separately.
+The previous workflow `format` input has been replaced; CLI/API dispatch callers
+must use boolean `qcow2`, `iso`, and `vmdk` inputs. For example, a VMDK-only run
+sets `qcow2=false`, `iso=false`, and `vmdk=true`.
 
 For a fresh payload, leave **payload_ref** blank. The preparation job publishes
 the payload before disk assembly, writes its source tag and digest reference to
@@ -467,7 +478,7 @@ Metadata records the original OS digest, disk-only payload image ID, tool versio
 requested tag, update reference, builder, and workflow run. Same-day container
 rebuilds can reuse date/hash tags; the recorded identities distinguish their
 contents. Artifact names also contain the
-workflow run and attempt so the two formats and repeated runs remain separate.
+workflow run and attempt so formats and repeated runs remain separate.
 
 Installed systems follow their source channel: `latest` updates to `latest`,
 `ics410_l01` updates to `ics410_l01`, and `ics410-l01` updates to `ics410-l01`.
@@ -488,8 +499,10 @@ on the [upstream generic ISO example](https://osbuild.org/docs/developer-guide/p
 Its kickstart explicitly selects the embedded payload and channel update
 reference. The installer environment does not become the installed OS.
 
-QCOW2 uses the new CLI's `--image-size "64 GiB"` root minimum and Btrfs default,
-allowing space for the preinstalled Homebrew and Flatpak stores. The local legacy
+QCOW2 and VMDK use the new CLI's `--image-size "64 GiB"` root minimum and Btrfs default,
+allowing space for the preinstalled Homebrew and Flatpak stores. VMDK uses the
+native `vmdk` builder target and shares QCOW2’s assembly path; it is not converted
+from a QCOW2 artifact. The local legacy
 disk configuration also uses a 64 GiB root minimum.
 The existing `just build-iso`/`just build-qcow2` recipes and
 `disk_config/iso.toml`/`disk_config/disk.toml` still use the legacy local builder;

@@ -12,15 +12,18 @@ on:
         options:
           - amd64
           - arm64
-      format:
-        description: "Output format (QCOW2, ISO, or both)"
-        required: true
-        default: qcow2
-        type: choice
-        options:
-          - qcow2
-          - iso
-          - both
+      qcow2:
+        description: "Build QCOW2 disk"
+        default: true
+        type: boolean
+      iso:
+        description: "Build ISO installer"
+        default: false
+        type: boolean
+      vmdk:
+        description: "Build VMDK disk for VMware Workstation (amd64 only)"
+        default: false
+        type: boolean
       image_tag:
         description: "Container channel or dated tag (latest, ics410_l01, CHANNEL-YYYYMMDD-HASH)"
         required: true
@@ -55,11 +58,22 @@ jobs:
     name: Resolve container source
     runs-on: ubuntu-24.04
     outputs:
+      formats: ${{ steps.formats.outputs.formats }}
       source_tag: ${{ steps.source.outputs.source_tag }}
       artifact_name: ${{ steps.source.outputs.artifact_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Validate selected formats
+        id: formats
+        env:
+          TARGET_ARCH: ${{ inputs.platform }}
+          BUILD_QCOW2: ${{ inputs.qcow2 }}
+          BUILD_ISO: ${{ inputs.iso }}
+          BUILD_VMDK: ${{ inputs.vmdk }}
+        run: |
+          python3 scripts/build-disk.py formats --arch "$TARGET_ARCH" \
+            --qcow2 "$BUILD_QCOW2" --iso "$BUILD_ISO" --vmdk "$BUILD_VMDK"
       - name: Install Skopeo
         run: |
           sudo apt-get update
@@ -69,14 +83,18 @@ jobs:
         env:
           INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
           TARGET_ARCH: ${{ inputs.platform }}
-          DISK_FORMAT: ${{ inputs.format }}
+          DISK_FORMATS: ${{ steps.formats.outputs.formats }}
         run: |
           python3 scripts/build-disk.py resolve \
             "${IMAGE_REGISTRY}/${IMAGE_NAME}" "$INPUT_IMAGE_TAG" \
             "$IMAGE_BUILDER" source.json --arch "$TARGET_ARCH"
-          python3 scripts/build-disk.py preflight source.json "$DISK_FORMAT"
+          python3 - <<'PYTHON'
+          import json, os, subprocess
+          subprocess.run(['python3', 'scripts/build-disk.py', 'preflight', 'source.json',
+                          *json.loads(os.environ['DISK_FORMATS'])], check=True)
+          PYTHON
           echo "artifact_name=disk-source-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
-      - name: Share exact source with both builds
+      - name: Share exact source with selected builds
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ steps.source.outputs.artifact_name }}
@@ -154,7 +172,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        format: ${{ fromJSON(inputs.format == 'both' && '["iso","qcow2"]' || format('["{0}"]', inputs.format)) }}
+        format: ${{ fromJSON(needs.resolve.outputs.formats) }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

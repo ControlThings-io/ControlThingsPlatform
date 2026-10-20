@@ -1,12 +1,13 @@
 """Check disk selection/orchestration with ``python3 tests/check_build_disk.py``.
 
-Requires Python 3.9+ and PyYAML; runs without registry access or root.
+Requires Python 3.10+ and PyYAML; runs without registry access or root.
 Mocks only external commands, exercising
 real resolution, file naming, checksums, failure propagation, and workflow shell
 syntax. Does not establish image-builder, Anaconda, or VM integration success.
 """
 
 import hashlib
+import itertools
 import importlib.util
 import json
 import os
@@ -114,7 +115,9 @@ for architecture, metadata, manifest in (
 
 with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
     for architecture in ("amd64", "arm64"):
-        for kind in ("iso", "qcow2"):
+        for kind in ("iso", "qcow2", "vmdk"):
+            if kind == "vmdk" and architecture == "arm64":
+                continue
             for channel in ("latest", "ics410_l01", "ics410-l01"):
                 metadata = resolve(channel, architecture=architecture)
                 output = Path(temporary) / f"{kind}-{channel}-{architecture}"
@@ -158,6 +161,7 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                     f'{hashlib.sha256(artifact.read_bytes()).hexdigest()}  {artifact.name}\n'
                 )
                 saved = json.loads((output / f"{name}.source.json").read_text())
+                assert saved["format"] == kind
                 assert saved["source_digest"] == digest
                 assert saved["disk_payload_image_id"] == payload_id
                 assert saved["tools"]["homebrew_versions"] == ["fixture 1.0"]
@@ -188,7 +192,7 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                 invocation = next(cmd for cmd in commands if "--output-name" in cmd)
                 assert "--bootc-pull-container" not in invocation
                 assert invocation[invocation.index("build") + 1] == (
-                    "bootc-generic-iso" if kind == "iso" else "qcow2"
+                    "bootc-generic-iso" if kind == "iso" else kind
                 )
                 assert invocation[invocation.index("--arch") + 1] == ("x86_64" if architecture == "amd64" else "aarch64")
                 assert saved["architecture"] == architecture
@@ -256,11 +260,54 @@ assert workflow["jobs"]["resolve"]["runs-on"] == "ubuntu-24.04"
 runner = workflow["jobs"]["build"]["runs-on"]
 assert runner == "${{ inputs.platform == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}"
 assert "${{ inputs.platform }}" in workflow["concurrency"]["group"]
-formats = workflow[True]["workflow_dispatch"]["inputs"]["format"]
-assert formats["default"] == "qcow2"
-assert formats["options"] == ["qcow2", "iso", "both"]
+inputs = workflow[True]["workflow_dispatch"]["inputs"]
+assert "format" not in inputs
+for kind in disk.FORMATS:
+    assert inputs[kind]["type"] == "boolean"
+    assert inputs[kind]["default"] == (kind == "qcow2")
 assert workflow["jobs"]["build"]["strategy"]["matrix"]["format"] == (
-    '${{ fromJSON(inputs.format == \'both\' && \'["iso","qcow2"]\' || format(\'["{0}"]\', inputs.format)) }}')
+    '${{ fromJSON(needs.resolve.outputs.formats) }}')
+assert workflow["jobs"]["resolve"]["outputs"]["formats"] == '${{ steps.formats.outputs.formats }}'
+selection_step = next(step for step in workflow["jobs"]["resolve"]["steps"]
+                      if step.get("id") == "formats")
+# Execute the real workflow shell for every checkbox combination on each arch.
+with tempfile.TemporaryDirectory(prefix="ct-formats-") as temporary:
+    github_output = Path(temporary) / "outputs"
+    for architecture in disk.ARCHITECTURES:
+        for flags in itertools.product((False, True), repeat=3):
+            selected = [kind for kind, enabled in zip(disk.FORMATS, flags) if enabled]
+            github_output.write_text("")
+            env = dict(os.environ, TARGET_ARCH=architecture, GITHUB_OUTPUT=str(github_output))
+            env.update({f"BUILD_{kind.upper()}": str(enabled).lower()
+                        for kind, enabled in zip(disk.FORMATS, flags)})
+            result = subprocess.run(['bash', '-e', '-c', selection_step['run']],
+                                    env=env, text=True, capture_output=True)
+            valid = bool(selected) and not (architecture == "arm64" and "vmdk" in selected)
+            assert (result.returncode == 0) == valid, result.stderr
+            if valid:
+                assert json.loads(result.stdout) == selected
+                assert json.loads(github_output.read_text().removeprefix("formats=")) == selected
+            else:
+                assert not github_output.read_text()
+
+# Invalid targets must fail before registry calls, preparation or output creation.
+for kinds, architecture in (([], "amd64"), (["vmdk"], "arm64"), (["raw"], "amd64")):
+    with patch.object(disk, "run") as command:
+        try:
+            disk.preflight({"architecture": architecture}, kinds)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Invalid preflight selection accepted")
+        command.assert_not_called()
+with patch.object(disk, "prepare") as prepare:
+    try:
+        disk.build({"architecture": "arm64"}, "vmdk", Path("unused-output"))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("ARM64 Workstation disk accepted")
+    prepare.assert_not_called()
 
 assert workflow["jobs"]["build"]["needs"] == ["resolve", "prepare"]
 assert workflow["jobs"]["prepare"]["needs"] == "resolve"
@@ -311,5 +358,5 @@ with tempfile.TemporaryDirectory(prefix="ct-installer-packages-") as temporary:
         assert ("grub2-pc-modules" in packages) == (architecture == "amd64")
         assert ("grub2-efi-x64-cdboot" in packages) == (architecture == "amd64")
         assert ("grub2-efi-aa64-cdboot" in packages) == (architecture == "arm64")
-print("PASS disk tag selection, immutable metadata, AMD64/ARM64 manifest selection, both formats/channels,")
+print("PASS disk tag selection, immutable metadata, AMD64/ARM64 manifest selection, all formats/channels,")
 print("     disk-only stores/identity, checksums/metadata, failures, native runners, installer packages and workflow syntax")

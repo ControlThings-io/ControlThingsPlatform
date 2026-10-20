@@ -5,8 +5,8 @@ The immutable Brewfile accepts simple brew/flatpak declarations, not Ruby code.
 `disk-selection` prints the selected container's Aurora defaults plus our tools
 as JSON; optional upstream bundles are never read. `brewfile` and `flatpak-ids`
 print only ControlThings entries. `install` runs as the Brew owner and uses
-pkexec for the fixed ControlThings Flatpak list. It never removes unlisted
-software. Nothing runs automatically at boot or during container updates.
+Flatpak's native authorization for the fixed ControlThings Flatpak list. It never
+removes unlisted software. Nothing runs automatically at boot or during container updates.
 All subprocess failures propagate; explicit installation may download packages.
 """
 
@@ -134,9 +134,10 @@ def run(*args: str) -> None:
 
 
 def install_flatpaks(apps: list[str]) -> None:
-    """Install missing system apps and allow X11 for ZAP when selected.
+    """Install system apps through native authorization; allow X11 for this user.
 
-    The ZAP workaround applies to all users. Command failures propagate so an
+    The per-user ZAP override needs no elevated helper. Disk preparation retains
+    its separate all-user override. Command failures propagate so an
     installation cannot silently finish without the required override.
     """
     run('flatpak', 'remote-add', '--system', '--if-not-exists', 'flathub',
@@ -144,11 +145,11 @@ def install_flatpaks(apps: list[str]) -> None:
     run('flatpak', 'install', '--system', '--noninteractive', '--assumeyes',
         'flathub', *apps)
     if 'org.zaproxy.ZAP' in apps:
-        run('flatpak', 'override', '--system', '--socket=x11', 'org.zaproxy.ZAP')
+        run('flatpak', 'override', '--user', '--socket=x11', 'org.zaproxy.ZAP')
 
 
-def install(brews: list[str]) -> None:
-    """Add missing formulae without upgrades, then authorize system Flatpaks."""
+def install(brews: list[str], apps: list[str]) -> None:
+    """Add formulae without upgrades, then install system Flatpaks as this user."""
     if os.geteuid() == 0:
         raise RuntimeError('Run ujust install-controlthings-tools as your normal login user')
     if not BREW.is_file():
@@ -159,11 +160,11 @@ def install(brews: list[str]) -> None:
         brewfile = Path(directory) / 'Brewfile'
         brewfile.write_text(''.join(f'brew "{name}"\n' for name in brews))
         run(str(BREW), 'bundle', 'install', '--no-upgrade', f'--file={brewfile}')
-    run('pkexec', HELPER, 'install-flatpaks')
+    install_flatpaks(apps)
 
 
 def main() -> None:
-    """Dispatch the fixed CLI; only explicit system Flatpak installation is root."""
+    """Dispatch the fixed CLI; Flatpak installation uses native authorization."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=(
         'brewfile', 'flatpak-ids', 'disk-selection', 'install-flatpaks', 'install'))
@@ -193,10 +194,8 @@ def main() -> None:
     elif args.action == 'flatpak-ids':
         print('\n'.join(manifest['flatpak']))
     elif args.action == 'install':
-        install(manifest['brew'])
+        install(manifest['brew'], manifest['flatpak'])
     else:
-        if os.geteuid() != 0:
-            raise RuntimeError('This operation requires root')
         install_flatpaks(manifest['flatpak'])
 
 
