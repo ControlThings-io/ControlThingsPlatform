@@ -69,7 +69,6 @@ systemctl enable crond.service atd.service
 useradd --system --user-group --home-dir /var/lib/ics410/workbook-update \
     --no-create-home --shell /bin/bash ics410-workbook-update
 useradd --system --user-group --no-create-home --shell /usr/sbin/nologin ics410-workbook-web
-chmod 0755 /usr/libexec/ics410-workbook-init
 # Apply the image's opt-in update policy after installing packages. Presets also
 # retain these defaults when systemd initializes a newly installed system.
 # Disable timers, rather than mask services, so manual updates and ujust work.

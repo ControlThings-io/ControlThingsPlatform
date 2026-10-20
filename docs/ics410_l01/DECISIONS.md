@@ -51,20 +51,35 @@ web account with only CAP_NET_BIND_SERVICE.
 
 Use `ics410-workbook-update` for Git ownership, SSH credentials, the upstream boot
 service and user crontab. Keep repository update files unchanged; enable the unit
-by absolute path rather than copying it. A platform drop-in corrects ExecStart
-redirection. Preserve the upstream cron/at schedule and destructive update policy.
-Git SSH configuration explicitly selects the account's SSH config despite HOME=/.
+by absolute path rather than copying it. Preserve the upstream cron/at schedule
+and destructive update policy. Git SSH configuration explicitly selects the
+account's SSH config despite HOME=/.
 
 The user explicitly accepts embedding `L01_PRIVATE_KEY`, a repository-scoped
 read-only deploy key, in distributed images and student VMs. Transfer it to the
 builder through a secret mount, never a build argument or traced shell value.
-The root-only image seed intentionally contains credentials for initialization;
-image recipients can extract them. Runtime permissions isolate the web account.
+Image recipients can extract it; runtime permissions isolate the web account.
 
-Seed missing mutable state only; preserve existing checkout and credentials on OS
-updates. A fresh build uses a cache-busting argument and records the workbook
-commit. Existing credentials require explicit rotation. Upstream service changes
-require daemon-reload (also performed by initialization each boot); changes to
+### Simplification accepted — 2026-10-19
+
+Populate the complete writable checkout, credentials and initial crontab during
+image creation only. Preserve `/var` across OS updates. Do not provision missing
+state on boot or introduce seed archives. This supersedes the earlier seed and
+initializer design; existing installations without the workbook need separate
+provisioning. Remove the platform systemd override and use upstream's service
+unchanged; service corrections belong in the workbook repository. Rename the
+platform web unit to `ewb-webserver.service` to match `ewb-update.service`.
+
+Allow every local user to invoke `workbook-update` through a root-owned platform
+launcher and a passwordless sudo rule restricted to the upstream script as the
+updater account. Pass arguments, stdout, stderr and exit status through. Keep
+checkout/key ownership restricted rather than granting users direct write/key
+access. Cron and systemd invoke the upstream script directly; concurrency belongs
+in that script, with no platform lock. Service definitions and internal paths
+must be corrected upstream before guest validation.
+
+A fresh build uses a cache-busting argument. Existing credentials require
+explicit rotation. Upstream service changes require daemon-reload; changes to
 [Install] require re-enablement. See [development guide](DEVELOPMENT.md#ics410-l01-workbook).
 
 ## Firefox workbook homepage — 2026-10-19

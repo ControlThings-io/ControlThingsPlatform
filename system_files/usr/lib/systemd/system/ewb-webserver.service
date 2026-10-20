@@ -1,7 +1,6 @@
 [Unit]
 Description=ICS410 local workbook web server
-Requires=ics410-workbook-init.service
-After=ics410-workbook-init.service
+RequiresMountsFor=/var/lib/ics410/workbook
 
 [Service]
 User=ics410-workbook-web
@@ -14,7 +13,7 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-InaccessiblePaths=/var/lib/ics410/workbook-update /var/lib/ics410/workbook/.git /usr/share/ics410-workbook
+InaccessiblePaths=/var/lib/ics410/workbook-update /var/lib/ics410/workbook/.git
 
 [Install]
 WantedBy=multi-user.target

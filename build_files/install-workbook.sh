@@ -2,14 +2,13 @@
 # Build-only installer. Requires /run/secrets/workbook_key and network access.
 # Clones the remote default branch; retains credentials intentionally for students.
 # Fails on missing resources or a service using an unexpected account. Never trace
-# secret contents. Seed is consumed only when the installed checkout is absent.
+# secret contents. Populates /var only at image creation; no boot-time reseeding.
 set +x
 set -euo pipefail
 umask 022
 account=ics410-workbook-update
 home_dir=/var/lib/ics410/workbook-update
 root=/var/lib/ics410/workbook
-seed=/usr/share/ics410-workbook
 install -d -m 0700 -o "$account" -g "$account" "$home_dir" "$home_dir/.ssh"
 install -m 0600 -o "$account" -g "$account" /run/secrets/workbook_key "$home_dir/.ssh/workbook_key"
 # HTTPS authenticates the published host keys; never trust an unauthenticated scan.
@@ -48,22 +47,28 @@ for file in workbook-update.sh ewb-update.service ewb-update.cron; do
 done
 grep -qx 'User=ics410-workbook-update' "$resources/ewb-update.service"
 runuser -u "$account" -- git -C "$root" config core.sshCommand "ssh -F $home_dir/.ssh/config"
-# Symlink execution uses the target mode; retain it in the disk and boot seed.
+# Cron and systemd execute the upstream script directly as its owner.
 chmod 0755 "$resources/workbook-update.sh"
-ln -s "$resources/workbook-update.sh" /usr/bin/workbook-update
-# Correct ExecStart's redirection without modifying the repository's service.
-install -d /usr/lib/systemd/system/ewb-update.service.d
-cat > /usr/lib/systemd/system/ewb-update.service.d/10-platform.conf <<CONF
-[Unit]
-After=ics410-workbook-init.service
-Requires=ics410-workbook-init.service
-[Service]
-ExecStart=
-ExecStart=/bin/bash $resources/workbook-update.sh
-StandardOutput=null
+# The root-owned launcher selects only this script as the dedicated account.
+# exec preserves arguments, stdout, stderr and the upstream exit status.
+install -d /usr/libexec /etc/sudoers.d
+cat > /usr/libexec/ics410-workbook-update <<CONF
+#!/bin/bash
+# Run the upstream updater as its owner. Pass arguments and output unchanged;
+# concurrency and option semantics belong to the upstream script.
+exec /usr/bin/sudo -n -H -u $account -- $resources/workbook-update.sh "\$@"
 CONF
+chmod 0755 /usr/libexec/ics410-workbook-update
+ln -s /usr/libexec/ics410-workbook-update /usr/bin/workbook-update
+# A command without an argument restriction permits upstream script options,
+# but grants neither a shell nor other commands as the updater account.
+printf 'ALL ALL=(%s) NOPASSWD: NOSETENV: %s/workbook-update.sh\n' \
+    "$account" "$resources" > /etc/sudoers.d/ics410-workbook-update
+chmod 0440 /etc/sudoers.d/ics410-workbook-update
+visudo -cf /etc/sudoers.d/ics410-workbook-update
+# Use the upstream unit unchanged, including ExecStart and its boot ordering.
 systemctl enable "$resources/ewb-update.service"
-systemctl enable ics410-workbook-init.service ics410-workbook-web.service
+systemctl enable ewb-webserver.service
 # Ensure allow lists, if supplied by the base, permit the dedicated account.
 for kind in cron at; do
     if [[ -f /etc/$kind.allow ]]; then
@@ -75,10 +80,5 @@ for kind in cron at; do
 done
 # Keep .git private while leaving published files readable by the web account.
 chmod 0700 "$root/.git"
-install -d -m 0700 "$seed"
-runuser -u "$account" -- git -C "$root" rev-parse HEAD > "$seed/revision"
-printf '%s\n' "${resources#"$root/"}" > "$seed/resources"
-tar -C /var/lib/ics410 -cf "$seed/seed.tar" workbook workbook-update
-chmod 0600 "$seed/seed.tar"
-# Install now for new disks, and again at first boot for existing installations.
+# Install the upstream schedule once during image creation.
 crontab -u "$account" "$resources/ewb-update.cron"

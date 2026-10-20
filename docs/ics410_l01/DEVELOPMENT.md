@@ -30,37 +30,82 @@ clone or resource validation failures stop the build. Direct Podman builds must
 supply `--secret id=workbook_key,src=...` and a fresh `WORKBOOK_BUILD_EPOCH` argument.
 
 The build accepts resources under `resources/` or `docs/resources/`, validates
-required files and `User=ics410-workbook-update`, and links `/usr/bin/workbook-update`
-to the discovered script. The repository's own internal paths must match its
-layout. The update unit remains linked into the checkout. Its platform drop-in
-sets ExecStart without shell-redirection tokens. Both cron and at daemons are
-enabled; no extra systemd update timer is installed.
+required files and `User=ics410-workbook-update`, and enables the upstream
+`ewb-update.service` by absolute path. The service and cron file contents remain
+unchanged; there is no platform service override. Both cron and at daemons are
+enabled. The platform web service is `ewb-webserver.service`.
+
+The complete Git checkout (including `.git`), credentials and initial user crontab
+are populated during image creation. There is no seed archive or boot initializer.
+OS updates preserve the existing `/var` state; they do not provision a missing
+workbook or repair one. This feature therefore requires a newly created disk
+installation, or separate manual provisioning for an existing installation.
 
 `ics410-workbook-update` owns the checkout and uses SSH configuration under
 `/var/lib/ics410/workbook-update/.ssh`. Local Git `core.sshCommand` selects this
-configuration explicitly. The web account has no access to credentials, `.git`,
-or the root-only seed. Image seeding fills absent state and installs the user
-crontab once; it never replaces an existing checkout/key during OS updates.
-The upstream updater may replace its dedicated user's crontab after a pull.
+configuration explicitly, including for cron with HOME=/. The web account cannot
+access credentials or `.git`.
 
-Useful guest checks and operations:
+Any local user can run `workbook-update`, with optional upstream arguments such
+as `-verbose`, without a password. `/usr/bin/workbook-update` links to the root-owned
+`/usr/libexec/ics410-workbook-update` launcher. It uses noninteractive sudo to run
+only the discovered upstream `workbook-update.sh` as `ics410-workbook-update`.
+The sudo rule permits script arguments, grants no environment override privilege,
+and grants no other commands. Arguments, stdout, stderr and exit status pass
+through; the launcher adds no logging, redirection or locking. Upstream controls
+option handling and concurrency between users, cron and systemd. Its destructive
+update policy applies to manual invocations too.
+
+### Changes required in the workbook repository
+
+Ensure the upstream `ewb-update.service` has these settings in its existing
+`[Service]` section (use `docs/resources` instead of `resources` if that is the
+repository's actual layout):
+
+```ini
+User=ics410-workbook-update
+WorkingDirectory=/var/lib/ics410/workbook
+ExecStart=/bin/bash /var/lib/ics410/workbook/resources/workbook-update.sh
+```
+
+Remove shell redirection such as `> /dev/null` from `ExecStart`. To suppress
+service stdout, add `StandardOutput=null`; otherwise leave normal journal output.
+These service settings do not affect output from manual script invocations.
+Keep the upstream boot enablement, for example `WantedBy=multi-user.target` in
+`[Install]`. Do not depend on `ics410-workbook-init.service`.
+
+Ensure paths inside the script and cron file use `/var/lib/ics410/workbook`.
+Cron and systemd should invoke the upstream script directly as the updater
+account, rather than calling the user launcher. Commit the script's executable
+bit upstream (`git update-index --chmod=+x <path-to-workbook-update.sh>`) so Git
+updates retain it. The platform also sets it executable during image creation.
+Implement any concurrency protection inside the upstream script.
+
+The private upstream files were not available for this revision's review. These
+are required settings, not a verified line-by-line patch to the other repository.
+
+### Guest checks and operations
 
 ```bash
-systemctl status ics410-workbook-web ewb-update crond atd
+systemctl status ewb-webserver ewb-update crond atd
 curl --fail http://127.0.0.1/
-sudo -u ics410-workbook-update workbook-update -verbose
+workbook-update -verbose
 sudo crontab -u ics410-workbook-update -l
 sudo -u ics410-workbook-update atq
-journalctl -u ics410-workbook-init -u ewb-update -u ics410-workbook-web
+journalctl -u ewb-update -u ewb-webserver
 ```
 
 After an upstream service-definition update, run `sudo systemctl daemon-reload`;
 restart it if immediate execution is desired. Re-enable the absolute unit path
-if its [Install] section changes. Initialization reloads systemd at each boot.
-The built seed revision is in `/usr/share/ics410-workbook/revision` (root access).
+if its `[Install]` section changes. There is no platform boot-time reload hook.
 Key rotation for existing installations requires explicit provisioning; rebuilding
 an image does not overwrite their persistent key.
 
+These changes do not migrate existing VMs: their `/var` checkout, installed cron,
+and `/etc` service links or overrides may retain earlier configuration. Inspect
+those separately when validating an upgraded VM; fresh disks are the installation
+path covered by this design.
+
 Local checks: `python3 tests/check_workbook.py` and
 `python3 tests/check_workflow_tags.py`. See [course status](STATUS.md)
-for the actual validation and remaining VM checks.
+for actual validation and remaining VM checks.

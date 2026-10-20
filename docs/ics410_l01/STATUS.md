@@ -2,35 +2,32 @@
 
 ## Current work — 2026-10-19
 
-Workbook integration is committed as `1ced9b1`, documentation relocation as
-`b56d242`, main Firefox changes merged as `35d3b55`, and the course homepage
-committed as `5934cee`. Executable updater correction is uncommitted. Shared history
-remains in [shared status](../STATUS.md); accepted course choices are in
+Workbook simplification is uncommitted on top of `3dd51ee`. Shared history remains
+in [shared status](../STATUS.md); accepted course choices are in
 [course decisions](DECISIONS.md).
 
-- Updater target now receives mode 0755 before image seed creation; boot
-  initialization also repairs its mode in existing persistent checkouts.
-  `tests/check_workbook.py` passed, including actual execution through the
-  symlink, archived mode and boot-time repair. Bash syntax and whitespace passed.
-  Image build and guest execution remain unverified. An upstream Git update that
-  restores a non-executable file mode may require permission repair again.
-- Firefox now defaults to `http://localhost/` on this branch, opening the local
-  workbook. All shortcuts and other Firefox defaults remain inherited from main
-  and user-editable. JSON and a comparison against main confirm only Homepage.URL
-  differs in the policy; whitespace checks passed. The browser regression now
-  reads the expected homepage from the policy. Guest startup verification remains
-  pending; no browser runtime check was repeated for this URL-only change.
-- Course uses normal Aurora stable with the existing Incus/agent/LXC and netcat
-  RPM selections. OS automatic-update defaults remain disabled.
-- Added workbook default-branch clone, retained read-only deploy key, writable
-  checkout, linked upstream boot updater, user cron plus atd, and localhost:80
-  Python web service. The updater account owns the checkout; a separate web
-  account cannot access its key or Git metadata.
-- Missing workbook/key state is seeded from the image on boot. Existing state
-  and crontab are preserved after initialization. Normal workbook updates use
-  the upstream script, which discards local edits and untracked files.
-- Workflow consumes `L01_PRIVATE_KEY`; local builds require
-  `WORKBOOK_SSH_KEY_FILE`. See [workbook build/operation instructions](DEVELOPMENT.md#ics410-l01-workbook).
+- Workbook and retained deploy-key credentials are populated only during image
+  creation. Removed seed archive creation, boot initialization and its unit.
+  Existing `/var` state persists; missing checkouts are not provisioned on OS update.
+- Removed the platform `ewb-update.service` override. The upstream service remains
+  linked and unchanged. Upstream must correct its ExecStart redirection and paths;
+  required settings are in [course development](DEVELOPMENT.md#changes-required-in-the-workbook-repository).
+  Private upstream files were unavailable for this review; corrections are pending.
+- `/usr/bin/workbook-update` now links to a root-owned launcher using passwordless,
+  noninteractive sudo for only the upstream script as `ics410-workbook-update`.
+  Arguments, stdout, stderr and exit status pass through. The complete `.git`
+  directory remains in the checkout; credentials and metadata retain restricted
+  ownership. Cron/systemd run the upstream script directly. Concurrency belongs
+  upstream, with no platform lock.
+- Renamed the platform web unit to `ewb-webserver.service`. It still serves
+  `/var/lib/ics410/workbook` at IPv4 localhost port 80 as a separate web account.
+- The updater's executable correction was committed as `8f3b701`; build-time chmod
+  remains. Commit its executable bit upstream too so Git updates retain it.
+- Firefox homepage remains `http://localhost/` (`5934cee`), with inherited editable
+  shortcuts/defaults. Course remains on normal Aurora stable with existing RPM
+  selections and OS automatic-update defaults disabled.
+- Workflow still consumes `L01_PRIVATE_KEY`; local builds require
+  `WORKBOOK_SSH_KEY_FILE`. See [build/operation instructions](DEVELOPMENT.md#ics410-l01-workbook).
 
 ## Documentation ownership correction — 2026-10-19
 
@@ -46,24 +43,29 @@ needed for that documentation-only correction, which is committed as `b56d242`.
 
 ## Workbook validation — 2026-10-19
 
-Passed: `python3 tests/check_workbook.py`, `python3 tests/check_workflow_tags.py`,
+Current local checks passed for the uncommitted simplification:
+`python3 tests/check_workbook.py`, `python3 tests/check_workflow_tags.py`,
 `XDG_RUNTIME_DIR=/tmp just check`, Bash syntax and `git diff --check`.
-Fixtures exercise real local Git clone of a default branch, tar seed extraction,
-permissions, unchanged upstream service, initialization retry/preservation, and
-workflow secret-file cleanup on success/failure. Account, service, crontab and
-network commands are mocked; these checks do not prove guest behavior.
 
-Systemd verification was blocked by sandbox credential/socket restrictions.
-Private repository cloning and full builds were not run: this shell cannot
-resolve GitHub and the Actions secret is not available locally. No remote CI,
-publication, SSH authentication or VM boot success is claimed.
+Workbook fixtures exercise real default-branch Git clones for both resource
+layouts, retained `.git` and credential permissions, unchanged upstream unit,
+initial crontab installation, renamed web-unit enablement, real visudo syntax
+validation, and launcher argument/stdout/stderr/exit-status forwarding. Workflow
+secret-file cleanup passes for successful and failed builds. Account ownership
+commands, sudo execution, systemd, crontab and network access are mocked: these
+checks do not prove actual unprivileged sudo authorization or guest behavior.
 
-Guest checks remaining: validate linked unit availability at boot, account/PAM
-permission for cron and at, SELinux, IPv4 localhost browser access, offline boot,
-SSH pulls under cron's HOME=/, delayed execution, persistence across reboot/OS
-update, and key isolation from the web service. Verify existing-install seeding
-as well as fresh ISO/QCOW2 installations. New seed keys do not rotate an existing
-machine's credentials; rotation needs explicit provisioning.
+No image build, private-repository fetch, remote CI, publication, real SSH update,
+or VM boot was performed for this change. Earlier systemd verification was
+blocked by sandbox credential/socket restrictions; no new systemd runtime result
+is claimed.
+
+Guest checks remaining: fresh QCOW2/ISO `/var` population including `.git`, linked
+unit boot availability, web serving, any unprivileged user's passwordless update
+with visible output/status, SSH pulls under cron's HOME=/, cron/at permission,
+SELinux and key isolation. Verify offline boot and persistence across reboot/OS
+update. Existing VMs retain `/var` and may retain old `/etc` unit links/overrides;
+this change does not migrate them or repair their checkouts or credentials.
 
 ## Validation evidence and gaps
 
@@ -83,8 +85,9 @@ machine's credentials; rotation needs explicit provisioning.
 
 ## Next steps
 
-- Build the course image using `L01_PRIVATE_KEY` and complete the workbook guest
-  checks above. Confirm the deployed repository resource paths and service account.
+- Correct the upstream service/script paths and executable bit using the linked
+  development instructions, then build a fresh course disk with `L01_PRIVATE_KEY`
+  and complete the workbook guest checks above.
 
 - Build the course OS container and prepare a fresh disk payload from that source;
   verify its channel remains `ics410_l01`.
