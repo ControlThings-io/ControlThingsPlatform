@@ -2,9 +2,23 @@
 
 ## Current work — 2026-10-19
 
-Workbook simplification is uncommitted on top of `3dd51ee`. Shared history remains
+Workbook simplification is committed as `6a5f8c2`. The merge from main
+`0ae7fc9` is resolved locally and awaiting a merge commit. Shared history remains
 in [shared status](../STATUS.md); accepted course choices are in
 [course decisions](DECISIONS.md).
+
+- Resolved workflow and Justfile conflicts by retaining course deploy-key setup
+  alongside main's temporary GitHub API token. Both secret files are cleaned up
+  on exit; both Podman secret arguments are preserved. CyberChef authentication,
+  download retries and early registry login come from main. Shared documentation
+  matches the merged main revision. The workbook installer and its container
+  step remain unchanged; host-key API authentication is deferred to the next task.
+- Merge checks passed: `tests/check_github_api.py`, `tests/check_http_download.py`,
+  `tests/check_registry_login.py`, `tests/check_cyberchef.py`,
+  `tests/check_workbook.py`, `tests/check_workflow_tags.py`, Just/Bash syntax and
+  whitespace review. Workflow fixtures now supply both credentials and check
+  cleanup/no secret logging. Network/Podman/systemd remain mocked; no new image
+  build or remote CI result is established. The existing course stash is preserved.
 
 - Workbook and retained deploy-key credentials are populated only during image
   creation. Removed seed archive creation, boot initialization and its unit.
@@ -12,7 +26,8 @@ in [shared status](../STATUS.md); accepted course choices are in
 - Removed the platform `ewb-update.service` override. The upstream service remains
   linked and unchanged. Upstream must correct its ExecStart redirection and paths;
   required settings are in [course development](DEVELOPMENT.md#changes-required-in-the-workbook-repository).
-  Private upstream files were unavailable for this review; corrections are pending.
+  User reports the upstream service updated; deployed paths and executable mode
+  still need guest verification. Private upstream files were not inspected here.
 - `/usr/bin/workbook-update` now links to a root-owned launcher using passwordless,
   noninteractive sudo for only the upstream script as `ics410-workbook-update`.
   Arguments, stdout, stderr and exit status pass through. The complete `.git`
@@ -43,7 +58,7 @@ needed for that documentation-only correction, which is committed as `b56d242`.
 
 ## Workbook validation — 2026-10-19
 
-Current local checks passed for the uncommitted simplification:
+Historical local checks for the simplification committed as `6a5f8c2` passed:
 `python3 tests/check_workbook.py`, `python3 tests/check_workflow_tags.py`,
 `XDG_RUNTIME_DIR=/tmp just check`, Bash syntax and `git diff --check`.
 
@@ -85,9 +100,9 @@ this change does not migrate them or repair their checkouts or credentials.
 
 ## Next steps
 
-- Correct the upstream service/script paths and executable bit using the linked
-  development instructions, then build a fresh course disk with `L01_PRIVATE_KEY`
-  and complete the workbook guest checks above.
+- Complete the resolved merge, then apply workbook API authentication when
+  requested. Build a fresh course disk and complete the workbook guest checks
+  above, including the user-reported upstream service correction.
 
 - Build the course OS container and prepare a fresh disk payload from that source;
   verify its channel remains `ics410_l01`.

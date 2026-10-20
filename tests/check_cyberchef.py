@@ -19,6 +19,7 @@ import zipfile
 
 
 sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path("build_files").resolve()))
 spec = importlib.util.spec_from_file_location("cyberchef", "build_files/install-cyberchef.py")
 chef = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(chef)

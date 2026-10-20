@@ -40,6 +40,7 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
 # Keep package installation independent of this changing build argument.
 ARG CYBERCHEF_BUILD_EPOCH=manual
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
+    --mount=type=secret,id=github_token \
     --mount=type=tmpfs,dst=/tmp \
     echo "Refreshing CyberChef (${CYBERCHEF_BUILD_EPOCH})" && \
     python3 /ctx/install-cyberchef.py

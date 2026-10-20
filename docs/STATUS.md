@@ -1,15 +1,37 @@
 # Current status
 
-Shared main status. Firefox defaults reviewed 2026-10-19 at starting revision
-`6305525`; earlier application/image evidence below retains its historical scope.
+Shared main status. API authentication work on 2026-10-19 starts at `e35ccbe`;
+earlier application/image evidence below retains its historical scope.
 [Decisions](DECISIONS.md) records accepted choices; [DEVELOPMENT.md](../DEVELOPMENT.md)
 has build instructions. Variant-only work belongs in `docs/<branch>/STATUS.md`
 and `DECISIONS.md`, not these shared files.
 
 ## Current work
 
+- Implemented build-time GitHub API authentication on main (uncommitted). Actions
+  passes its temporary token through a private file and Podman secret; CyberChef
+  uses the API-only helper with redirect rejection and bounded HTTP retries.
+  ZIP/license downloads share retries for transient HTTP/network failures and
+  truncated transfers. Eligible jobs authenticate before pulls, using an explicit
+  temporary rootful Podman auth file; Docker login still supports signing.
+  Local builds optionally use `GITHUB_API_TOKEN_FILE`. No workbook changes are
+  included; the course stash is preserved. The motivating course container run
+  [39346663938](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/39346663938)
+  failed on anonymous CyberChef metadata lookup with HTTP 403 rate limit exceeded.
+  Local API, HTTP-download, registry-login, CyberChef and workflow-tag regressions
+  passed, along with Just/Bash
+  syntax and whitespace checks. Fixtures cover API credential scope, redirects,
+  bounded retries, token-file permissions, environment removal and cleanup after
+  successful/failed builds, partial-download replacement, retry exhaustion,
+  filesystem failures and registry auth-file export/cleanup. Podman and network
+  requests are mocked. CyberChef
+  desktop validation emitted only its existing multiple-category hint. No live
+  authenticated request, image build or remote CI run was performed. Next: commit
+  and push when authorized, then verify the container build in Actions. See
+  [build instructions](../DEVELOPMENT.md#cyberchef-offline-application).
+
 - Added `/etc/skel/Samples` pointing to `/usr/share/controlthings/samples` on
-  main (uncommitted). Symlink target, temporary-home copy preservation and
+  main (committed as `e35ccbe`). Symlink target, temporary-home copy preservation and
   whitespace checks passed. Existing homes are not migrated; fresh-user guest
   validation remains pending.
 

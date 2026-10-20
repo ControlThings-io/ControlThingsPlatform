@@ -27,10 +27,12 @@ with tempfile.TemporaryDirectory(prefix='workbook-workflow-') as tmp:
         command.chmod(0o755)
     for status in ('0', '1'):
         result = subprocess.run(['bash', '-c', block], capture_output=True, text=True,
-            env=dict(env, L01_PRIVATE_KEY='fixture-secret-text', RUNNER_TEMP=tmp,
+            env=dict(env, L01_PRIVATE_KEY='fixture-secret-text', GITHUB_TOKEN='fixture-api-token', RUNNER_TEMP=tmp,
                      IMAGE_NAME='fixture', DEFAULT_TAG='ics410_l01', BUILD_EXIT=status))
         assert result.returncode == int(status), result.stderr
         assert not list(root.glob('workbook-key.*'))
+        assert not list(root.glob('github-token.*'))
+        assert 'fixture-api-token' not in result.stdout + result.stderr
         assert 'fixture-secret-text' not in result.stdout + result.stderr
 print('PASS workflow secret cleanup on success and failure')
 

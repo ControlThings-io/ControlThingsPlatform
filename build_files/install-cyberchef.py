@@ -18,18 +18,20 @@ import shutil
 import stat
 import tempfile
 from typing import Any
-from urllib.request import Request, urlopen
+from urllib.request import Request
 import zipfile
+
+import github_api
+import http_download
 
 
 RELEASE_API = "https://api.github.com/repos/gchq/CyberChef/releases/latest"
 
 
 def download(url: str, destination: Path) -> None:
-    """Stream an HTTPS download to disk; propagate HTTP, timeout, and IO errors."""
+    """Download an asset without credentials, retrying transient failures twice."""
     request = Request(url, headers={"User-Agent": "ControlThingsPlatform-build"})
-    with urlopen(request, timeout=120) as response, destination.open("wb") as output:
-        shutil.copyfileobj(response, output)
+    http_download.download(request, destination)
 
 
 def select_asset(release: dict[str, Any]) -> dict[str, Any]:
@@ -121,7 +123,7 @@ def main() -> None:
     """Resolve latest once, download its ZIP/license, and install under /usr/share."""
     with tempfile.TemporaryDirectory(prefix="cyberchef-download-") as temporary:
         work = Path(temporary)
-        download(RELEASE_API, work / "release.json")
+        github_api.download(RELEASE_API, work / "release.json")
         release = json.loads((work / "release.json").read_text())
         asset = select_asset(release)
         download(asset["browser_download_url"], work / "cyberchef.zip")

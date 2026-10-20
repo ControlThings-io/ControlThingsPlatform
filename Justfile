@@ -104,6 +104,10 @@ build $target_image=image_name $tag=default_tag:
     : "${WORKBOOK_SSH_KEY_FILE:?Set WORKBOOK_SSH_KEY_FILE to the workbook deploy key file}"
     test -s "$WORKBOOK_SSH_KEY_FILE"
     BUILD_ARGS=(--secret "id=workbook_key,src=$WORKBOOK_SSH_KEY_FILE")
+    if [[ -n "${GITHUB_API_TOKEN_FILE:-}" ]]; then
+        test -s "$GITHUB_API_TOKEN_FILE"
+        BUILD_ARGS+=(--secret "id=github_token,src=$GITHUB_API_TOKEN_FILE")
+    fi
     BUILD_ARGS+=("--build-arg" "WORKBOOK_BUILD_EPOCH=$(date -u +%s%N)")
     BUILD_ARGS+=("--build-arg" "CYBERCHEF_BUILD_EPOCH=$(date -u +%s%N)")
     LABELS=()
