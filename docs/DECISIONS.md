@@ -220,7 +220,7 @@ working, but does not eliminate these independent causes. The sole changed image
 config label is `org.opencontainers.image.created`; config/history metadata alone
 cannot explain the 24 changed filesystem diff IDs.
 
-Proposed next work: controlled deterministic-mtime experiments covering copied
+Deferred proposals: controlled deterministic-mtime experiments covering copied
 assets, generated files, and directory headers, followed by separate database
 component isolation/cleanup experiments. Preserve RPM inventory and DNF history;
 do not delete databases as a size workaround. Chunkah documents
@@ -230,6 +230,30 @@ epoch can stabilize same-commit rebuilds yet change unchanged assets at every
 new commit. Test both identical-input rebuilds and a small subsequent source edit.
 The 468.509 MB is the measured timestamp-only portion of this pair, not a proven
 future saving; the first normalization deployment can itself replace layers.
+
+### Deferred: monitor Aurora before local implementation — 2026-10-19
+
+Accepted user direction: defer timestamp normalization and related layer-size
+optimizations. Keep the existing build behavior while reviewing upstream progress
+when this work is revisited. This records a project watch list; no scheduled
+monitoring or GitHub notification subscription has been configured.
+
+Watch:
+
+- [Aurora PR #3028](https://github.com/ublue-os/aurora/pull/3028), merged
+  2026-10-16: filesystem timestamp normalization and non-RPM component handling.
+- [Aurora reproducibility tracker #2579](https://github.com/ublue-os/aurora/issues/2579)
+  and [update-size reporting #2810](https://github.com/ublue-os/aurora/issues/2810):
+  measured improvements, remaining causes, and regressions.
+- [Chunkah #160](https://github.com/coreos/chunkah/issues/160): independent
+  timestamp clamping without changing layer planning or image creation time.
+
+Revisit when Aurora’s relevant stable images include the changes and useful
+before/after results or operational experience are available, or when the user
+prioritizes this work. Upstream normalization does not automatically cover files
+modified afterward by our customization steps. Any future local change still
+needs identical-input and small-source-edit comparisons; database state remains
+separate from filesystem timestamps. No implementation approach is accepted yet.
 
 ## Weekly container builds — 2026-10-15
 

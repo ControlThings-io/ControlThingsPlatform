@@ -16,9 +16,12 @@ and `DECISIONS.md`, not these shared files.
   bookkeeping changes. Same base layers, 2,599 package identities, CyberChef
   archive and Chunkah grouping; RPM changes are 12 install-time/transaction-time
   header pairs and DNF logical changes are transaction timestamps only. No
-  runtime/build changes were made. See [evidence and proposed next work](DECISIONS.md#same-commit-layer-investigation--2026-10-19).
-  Next: measure deterministic mtimes across identical builds and a small source
-  edit, then evaluate database component isolation without losing inventory/history.
+  runtime/build changes were made. See [evidence and deferred follow-up](DECISIONS.md#same-commit-layer-investigation--2026-10-19).
+  Deferred by user direction on 2026-10-19: keep timestamp normalization and
+  database isolation on the upstream watch list. Review Aurora’s adoption,
+  measured results, and regressions before revisiting a local implementation;
+  tracking links and revisit criteria are in the decision entry. This is a
+  project watch-list item, not a scheduled background monitor.
 
 - Added AMD64 VMDK assembly for VMware Workstation and independent QCOW2/ISO/VMDK
   workflow checkboxes (`4e88610`). QCOW2 alone defaults on; empty selections
