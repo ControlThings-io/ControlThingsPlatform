@@ -21,7 +21,7 @@ on:
         default: false
         type: boolean
       vmdk:
-        description: "Build VMDK disk for VMware Workstation (amd64 only)"
+        description: "Build VMware bundle; latest also includes VirtualBox (amd64 only)"
         default: false
         type: boolean
       image_tag:
@@ -184,10 +184,10 @@ jobs:
       - name: Maximize build space
         if: inputs.platform == 'amd64'
         uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6
-      - name: Install Podman
+      - name: Install disk build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y podman skopeo
+          sudo apt-get install -y podman skopeo qemu-utils
       - name: Log in to payload registry
         env:
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -197,12 +197,29 @@ jobs:
           DISK_FORMAT: ${{ matrix.format }}
         run: python3 scripts/build-disk.py build disk-input/prepared.json "$DISK_FORMAT" output
       - name: Upload image, checksum, manifest, and source metadata
+        if: matrix.format != 'vmdk'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: controlthingsplatform-${{ needs.resolve.outputs.source_tag }}-${{ inputs.platform }}-${{ matrix.format }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: output/
           if-no-files-found: error
           compression-level: 0
+      - name: Upload compressed VM bundle
+        if: matrix.format == 'vmdk'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: output/*.zip
+          archive: false
+          if-no-files-found: error
+      - name: Upload VM checksums, manifest, and source metadata
+        if: matrix.format == 'vmdk'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: controlthingsplatform-${{ needs.resolve.outputs.source_tag }}-${{ inputs.platform }}-vmdk-metadata-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            output/*.json
+            output/*.sha256
+          if-no-files-found: error
       - name: Upload to S3
         if: inputs.upload-to-s3
         env:
@@ -219,7 +236,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y rclone
-          rclone copy output/ "S3:${S3_BUCKET}/${SOURCE_TAG}/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/${TARGET_ARCH}/${DISK_FORMAT}/"
+          filters=()
+          if [[ "$DISK_FORMAT" == vmdk ]]; then
+            filters=(--include '*.zip' --include '*.json' --include '*.sha256')
+          fi
+          rclone copy output/ "S3:${S3_BUCKET}/${SOURCE_TAG}/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/${TARGET_ARCH}/${DISK_FORMAT}/" "${filters[@]}"
       - name: Log out of payload registry
         if: always()
         run: sudo podman logout ghcr.io || true

@@ -21,6 +21,8 @@ import yaml
 
 sys.dont_write_bytecode = True
 
+from disk_test_fixtures import assembly_command
+
 spec = importlib.util.spec_from_file_location("build_disk", "scripts/build-disk.py")
 disk = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(disk)
@@ -125,6 +127,9 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
 
                 def command(*args, capture=False):
                     commands.append(args)
+                    response = assembly_command(args)
+                    if response is not None:
+                        return response
                     # Rootful Podman's storage directory is inaccessible to
                     # the runner account, even for a read-only df diagnostic.
                     if args[0] == "df" and "/var/lib/containers/storage" in args:
@@ -162,6 +167,14 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                 )
                 saved = json.loads((output / f"{name}.source.json").read_text())
                 assert saved["format"] == kind
+                assert saved["artifact_bytes"] == artifact.stat().st_size
+                assert not any(cmd[:2] == ("qemu-img", "convert") for cmd in commands)
+                if kind == "vmdk":
+                    assert saved["vmdk_subformat"] == "monolithicSparse"
+                    assert (output / saved["bundle_filename"]).is_file()
+                    assert not list(output.glob(".bundle-*"))
+                else:
+                    assert "vmdk_subformat" not in saved
                 assert saved["source_digest"] == digest
                 assert saved["disk_payload_image_id"] == payload_id
                 assert saved["tools"]["homebrew_versions"] == ["fixture 1.0"]
@@ -188,10 +201,10 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                                    f"label=io.controlthings.disk-build={build_id}")
                 assert commands.index(cleanup) > commands.index(payload_build)
                 assert commands.index(cleanup) < commands.index(next(
-                    cmd for cmd in commands if "--output-name" in cmd))
-                invocation = next(cmd for cmd in commands if "--output-name" in cmd)
+                    cmd for cmd in commands if "--bootc-ref" in cmd))
+                invocation = next(cmd for cmd in commands if "--bootc-ref" in cmd)
                 assert "--bootc-pull-container" not in invocation
-                assert invocation[invocation.index("build") + 1] == (
+                assert invocation[invocation.index("manifest" if kind == "vmdk" else "build") + 1] == (
                     "bootc-generic-iso" if kind == "iso" else kind
                 )
                 assert invocation[invocation.index("--arch") + 1] == ("x86_64" if architecture == "amd64" else "aarch64")
@@ -323,6 +336,37 @@ for job_name, dependency in (("prepare", "resolve"), ("build", "prepare")):
 assembly = next(step for step in workflow["jobs"]["build"]["steps"]
                 if step["name"] == "Assemble retained payload and checksum")
 assert "build disk-input/prepared.json" in assembly["run"]
+
+uploads = [step for step in workflow['jobs']['build']['steps']
+           if step.get('uses', '').startswith('actions/upload-artifact@')]
+assert len(uploads) == 3
+bundle_upload = next(step for step in uploads if step['with'].get('archive') is False)
+assert bundle_upload['if'] == "matrix.format == 'vmdk'"
+assert bundle_upload['with']['path'] == 'output/*.zip'
+metadata_upload = next(step for step in uploads if 'metadata-' in step['with'].get('name', ''))
+assert metadata_upload['with']['path'].splitlines() == ['output/*.json', 'output/*.sha256']
+assert metadata_upload['if'] == "matrix.format == 'vmdk'"
+assert uploads[0]['if'] == "matrix.format != 'vmdk'"
+
+# Exercise S3 filters without installation or network access.
+s3 = next(step for step in workflow['jobs']['build']['steps'] if step['name'] == 'Upload to S3')
+with tempfile.TemporaryDirectory(prefix='ct-upload-') as temporary:
+    root = Path(temporary)
+    (root / 'sudo').write_text('#!/bin/sh\nexit 0\n')
+    (root / 'sudo').chmod(0o755)
+    (root / 'rclone').write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$UPLOAD_CAPTURE"\n')
+    (root / 'rclone').chmod(0o755)
+    for kind in disk.FORMATS:
+        capture = root / kind
+        env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ['PATH'],
+                   UPLOAD_CAPTURE=str(capture), DISK_FORMAT=kind, S3_BUCKET='fixture',
+                   SOURCE_TAG='latest-20261020-abcdef0', GITHUB_RUN_ID='123',
+                   GITHUB_RUN_ATTEMPT='2', TARGET_ARCH='amd64')
+        subprocess.run(['bash', '-e', '-c', s3['run']], env=env, check=True)
+        args = capture.read_text().splitlines()
+        assert args[:3] == ['copy', 'output/', f'S3:fixture/latest-20261020-abcdef0/123-2/amd64/{kind}/']
+        assert args[3:] == (['--include', '*.zip', '--include', '*.json', '--include', '*.sha256']
+                            if kind == 'vmdk' else [])
 
 for job in workflow["jobs"].values():
     for step in job["steps"]:

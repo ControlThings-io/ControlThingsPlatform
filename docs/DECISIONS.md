@@ -73,14 +73,48 @@ first-run speedup is not promised. Dependency preflight is metadata-only.
 
 Manual disk builds offer independent QCOW2 (default on), ISO, and VMDK
 checkboxes as of 2026-10-19, superseding the single format/both selector.
-ISO/QCOW2 use native AMD64/ARM64 runners; VMDK targets AMD64 VMware Workstation. A matching source architecture must exist; container CI publishes AMD64
-only. Use the pinned image-builder CLI and a separate pinned Fedora 44 Anaconda
+ISO/QCOW2 use native AMD64/ARM64 runners; VMDK targets AMD64 VMware Workstation
+and, for latest-channel bundles, VirtualBox. A matching source architecture must
+exist; container CI publishes AMD64 only. Use the pinned image-builder CLI and a separate pinned Fedora 44 Anaconda
 installer; legacy local Justfile disk recipes remain unmigrated and unbundled.
-QCOW2 and VMDK retain Btrfs with a 64 GiB root minimum. VMDK uses native
-image-builder output and the same retained payload and provenance handling.
-The user will supply VM configurations separately and manually test Workstation;
-OVA packaging is outside this change. Empty selections and ARM64 VMDK fail
-before preparation. Existing CLI preflight `both` remains an ISO/QCOW2 alias.
+QCOW2 and VMDK retain Btrfs with a 64 GiB root minimum. VMDK shares the retained
+payload and provenance handling. Empty selections and ARM64 VMDK fail before
+preparation. Existing CLI preflight `both` remains an ISO/QCOW2 alias. OVA
+packaging is outside this change.
+
+Accepted replacement — 2026-10-21: build monolithicSparse directly and compress
+the distribution ZIP. The pinned builder generates the manifest; customize only
+its VMDK stage's subformat, compression flag and output filename, then execute
+OSBuild's VMDK export in that same builder. Preserve the builder's container
+setup for SELinux and loop devices. Reject unexpected manifest layouts and
+validate final disk capacity/subformat/extents before packaging. This avoids the
+second disk conversion, not OSBuild's normal raw-disk assembly or the larger
+extracted sparse disk. ZIP compression is Deflate level 6 with ZIP64 support.
+
+This supersedes the uncommitted 2026-10-20 native-streamOptimized-to-monolithicSparse
+conversion implementation. Two native builds failed guest writes in VMware;
+user testing confirmed monolithicSparse works in VMware and VirtualBox. These
+reports support the subformat choice, not validation of the revised workflow.
+
+Latest-channel bundles include exactly the versioned VMDK plus the fixed names
+`controlthingsplatform.vmx` and `controlthingsplatform.vbox`; branch bundles omit
+VBOX. Dated source tags follow their originating channel. Generate configuration
+copies from the supplied templates, preserving all settings except the approved
+fields: VMX display name/disk basename; VBOX disk basename, matching media UUIDs
+and a fresh machine UUID per build. VMX display names are `ControlThings Platform`
+for latest and `UPPERCASE_BRANCH - ControlThings Platform` otherwise. Initialize
+VirtualBox's `ddb.uuid.image` in reserved VMDK descriptor space if absent, before
+checksumming. Do not confuse it with a filesystem UUID or VMware's disk UUID.
+Repository templates require explicit approval before edits; placeholders are
+unnecessary. The supplied VBOX template's fixed machine UUID stays in the source;
+each generated copy replaces it.
+
+Use one prebuilt ZIP for GitHub and S3. The pinned upload-artifact action supports
+`archive: false`, so it uploads that ZIP directly. JSON provenance/manifest and
+disk/ZIP SHA-256 files are separate: a metadata artifact on GitHub, sibling objects
+on S3. ISO/QCOW2 packaging is unchanged. Keep the unpacked VMDK in local output
+but exclude it from VMDK S3 uploads. Bundle names include CI run/attempt to prevent
+collisions. Checksums describe final bytes after media UUID initialization.
 
 Resolve the source once. Derive filename date/hash from its version label and
 record actual digests because same-day tags may be reused and revision labels
@@ -88,9 +122,15 @@ may be inherited. Embed/install the local prepared payload; installed systems
 follow the originating OS channel. Preserve `ics410_l01` and `ics410-l01` as
 distinct spellings. Never silently pull a different source during assembly.
 
-Always upload separate GitHub artifacts, checksums, source metadata, and manifests.
+Keep each format in its own GitHub artifact(s), with checksums, source metadata, and manifests.
 Optional S3 paths include run/attempt/architecture/format to prevent overwrites.
 See [disk instructions](../DEVELOPMENT.md#building-disk-images).
+
+Accepted VM template default — 2026-10-21: use two vCPUs in both supplied
+configurations. VMware uses one virtual socket with two cores (`numvcpus = "2"`,
+`cpuid.coresPerSocket = "2"`); VirtualBox retains its existing CPU count of two.
+This is a starting point for desktop responsiveness on student laptops, not a
+measured performance claim. Lower-end Windows 11 host testing remains pending.
 
 ## CyberChef offline build — 2026-10-15
 

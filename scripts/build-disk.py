@@ -8,7 +8,8 @@ Usage: build-disk.py resolve IMAGE TAG BUILDER OUTPUT_JSON [--arch {amd64,arm64}
        build-disk.py preflight INPUT_JSON {iso,qcow2,vmdk,both} [...]
        build-disk.py formats --arch ARCH --qcow2 BOOL --iso BOOL --vmdk BOOL
 
-Requires Skopeo for resolution and sudo/Podman for builds. Resolution inspects
+Requires Skopeo for resolution, sudo/Podman for builds, and host qemu-img for
+VMDK validation. Resolution inspects
 immutable metadata after selecting a digest; all selected jobs consume that JSON.
 Preparation populates a disk-only image's /var with Homebrew and Flatpaks.
 CI retains it in a separate registry package, then assembly pulls that digest
@@ -26,8 +27,12 @@ import json
 import os
 from pathlib import Path
 import re
+import struct
 import subprocess
+import tempfile
 import uuid
+import xml.etree.ElementTree as ET
+import zipfile
 
 ARCHITECTURES = {"amd64": "x86_64", "arm64": "aarch64"}
 FORMATS = ("qcow2", "iso", "vmdk")
@@ -335,13 +340,180 @@ def prepare(metadata: dict[str, str], work: Path) -> tuple[str, dict]:
     return payload_id, tools
 
 
+def configure_vmdk_manifest(manifest: dict, filename: str) -> int:
+    """Select direct sparse VMDK output; return expected virtual size in bytes.
+
+    Accept the pinned builder's single-stage vmdk pipeline reading disk.raw from
+    image. Fail on layout changes so a builder update cannot silently publish a
+    different format. Only the VMDK stage changes; OSBuild exports that pipeline
+    and its dependencies, not the unused QCOW2/OVA pipelines in the manifest.
+    """
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+\.vmdk", filename):
+        raise ValueError("Unsafe VMDK filename")
+    pipelines = manifest.get("pipelines", [])
+    targets = [p for p in pipelines if p.get("name") == "vmdk"]
+    if len(targets) != 1 or len(targets[0].get("stages", [])) != 1:
+        raise ValueError("Expected one single-stage vmdk pipeline")
+    stage = targets[0]["stages"][0]
+    if (stage.get("type") != "org.osbuild.qemu"
+            or stage.get("options", {}).get("format", {}).get("type") != "vmdk"
+            or stage.get("inputs", {}).get("image", {}).get("references")
+            != {"name:image": {"file": "disk.raw"}}):
+        raise ValueError("Unexpected VMDK stage or raw input")
+    sizes = [s["options"]["size"] for p in pipelines if p.get("name") == "image"
+             for s in p.get("stages", []) if s.get("type") == "org.osbuild.truncate"
+             and s.get("options", {}).get("filename") == "disk.raw"]
+    if len(sizes) != 1 or not str(sizes[0]).isdigit() or int(sizes[0]) <= 0:
+        raise ValueError("Expected a positive raw disk capacity")
+    stage["options"]["filename"] = filename
+    stage["options"]["format"].update(subformat="monolithicSparse", compression=False)
+    return int(sizes[0])
+
+
+def validate_vmdk(artifact: Path, capacity: int) -> None:
+    """Reject unexpected format, capacity, compression or external disk extents."""
+    result = json.loads(run("qemu-img", "info", "--output=json", str(artifact), capture=True))
+    details = result.get("format-specific", {}).get("data", {})
+    extents = details.get("extents", [])
+    if (result.get("format") != "vmdk" or result.get("virtual-size") != capacity
+            or details.get("create-type") != "monolithicSparse"
+            or len(extents) != 1 or extents[0].get("compressed", False)
+            or Path(extents[0].get("filename", "")).resolve() != artifact.resolve()):
+        raise ValueError("Expected an uncompressed, self-contained monolithicSparse VMDK of the requested capacity")
+
+
+def vmdk_media_uuid(artifact: Path) -> str:
+    """Read or initialize VirtualBox's ddb.uuid.image in a QEMU sparse VMDK.
+
+    This is the media UUID, not VMware's ddb.uuid or a filesystem UUID. Only the
+    reserved embedded descriptor is written; grain tables and guest sectors are
+    untouched. Reject invalid headers, duplicate UUIDs and insufficient reserved
+    space before writing. Call after format validation and before checksumming.
+    """
+    with artifact.open("r+b") as stream:
+        header = stream.read(512)
+        if len(header) != 512 or header[:4] != b"KDMV":
+            raise ValueError("Missing sparse VMDK header")
+        offset, sectors = struct.unpack_from("<QQ", header, 28)
+        start, length = offset * 512, sectors * 512
+        if offset != 1 or not 1 <= sectors <= 128 or start + length > artifact.stat().st_size:
+            raise ValueError("Unexpected embedded VMDK descriptor bounds")
+        stream.seek(start)
+        data = stream.read(length)
+        descriptor, separator, padding = data.partition(b"\0")
+        if not separator or padding.strip(b"\0"):
+            raise ValueError("Invalid VMDK descriptor padding")
+        text = descriptor.decode("ascii")
+        if not re.search(r'^createType="monolithicSparse"\s*$', text, re.MULTILINE):
+            raise ValueError("Unexpected VMDK descriptor format")
+        entries = re.findall(r'^ddb\.uuid\.image\s*=\s*"([^"]+)"\s*$', text, re.MULTILINE)
+        keys = re.findall(r'^ddb\.uuid\.image\s*=', text, re.MULTILINE)
+        if len(keys) != len(entries) or len(entries) > 1:
+            raise ValueError("Invalid or duplicate VirtualBox media UUID")
+        if entries:
+            value = uuid.UUID(entries[0])
+            if value.int == 0:
+                raise ValueError("VirtualBox media UUID must not be zero")
+            return str(value)
+        value = str(uuid.uuid4())
+        replacement = descriptor.rstrip() + f'\nddb.uuid.image = "{value}"\n'.encode("ascii")
+        if len(replacement) >= length:
+            raise ValueError("No reserved space for VirtualBox media UUID")
+        stream.seek(start)
+        stream.write(replacement.ljust(length, b"\0"))
+        return value
+
+
+def vm_configurations(artifact: Path, channel: str) -> dict[str, bytes]:
+    """Render approved substitutions in copies of the repository VM templates.
+
+    Latest bundles include VBOX with matching media references and a new machine
+    UUID per build. Branch bundles include only VMX. Preserve all other template
+    content, including line endings, and reject missing/ambiguous target fields.
+    May initialize the disk's media UUID; must run before hashing or packaging.
+    """
+    templates = Path(__file__).resolve().parents[1] / "disk_config/virtualization"
+    display = "ControlThings Platform"
+    if channel != "latest":
+        display = f"{channel.upper()} - {display}"
+    vmx = (templates / "controlthingsplatform.vmx").read_bytes().decode("utf-8")
+    for key, value in (("displayName", display), ("nvme0:0.fileName", artifact.name)):
+        vmx, count = re.subn(rf'(?m)^{re.escape(key)} = "[^"\r\n]*"',
+                             lambda _: f'{key} = "{value}"', vmx)
+        if count != 1:
+            raise ValueError(f"Expected one VMX {key} field")
+    configs = {"controlthingsplatform.vmx": vmx.encode("utf-8")}
+    if channel == "latest":
+        vbox = (templates / "controlthingsplatform.vbox").read_bytes().decode("utf-8")
+        root = ET.fromstring(vbox)
+        ns = {"v": "http://www.virtualbox.org/"}
+        paths = ("v:Machine", "v:Machine/v:MediaRegistry/v:HardDisks/v:HardDisk",
+                 "v:Machine/v:Hardware/v:StorageControllers/v:StorageController/v:AttachedDevice/v:Image")
+        nodes = [root.findall(path, ns) for path in paths]
+        if any(len(found) != 1 for found in nodes):
+            raise ValueError("Expected one VBOX machine, disk and attached image")
+        machine, hard_disk, attached = [found[0] for found in nodes]
+        if hard_disk.get("uuid") != attached.get("uuid"):
+            raise ValueError("VBOX template disk UUIDs disagree")
+        media = "{" + vmdk_media_uuid(artifact) + "}"
+        replacements = (
+            (f'<Machine uuid="{machine.attrib["uuid"]}"', f'<Machine uuid="{{{uuid.uuid4()}}}"', 1),
+            (f'uuid="{hard_disk.attrib["uuid"]}"', f'uuid="{media}"', 2),
+            (f'location="{hard_disk.attrib["location"]}"', f'location="{artifact.name}"', 1),
+        )
+        for old, new, expected in replacements:
+            if vbox.count(old) != expected:
+                raise ValueError("Ambiguous VBOX template substitution")
+            vbox = vbox.replace(old, new)
+        ET.fromstring(vbox)
+        configs["controlthingsplatform.vbox"] = vbox.encode("utf-8")
+    return configs
+
+
+def package_vmdk(artifact: Path, metadata: dict[str, str]) -> Path:
+    """Create a ZIP64/Deflate-6 bundle with only the disk and selected VM configs.
+
+    Stage the ZIP in a temporary sibling directory; failures remove partial ZIPs.
+    The same prebuilt ZIP is uploaded directly to GitHub and S3. Keep the original
+    disk locally; metadata/checksums are separate files, never ZIP members.
+    """
+    configs = vm_configurations(artifact, channel_for(metadata["source_tag"]))
+    suffix = ""
+    if metadata.get("workflow_run"):
+        suffix = f'-{metadata["workflow_run"]}-{metadata["workflow_attempt"]}'
+        if not re.fullmatch(r"-\d+-\d+", suffix):
+            raise ValueError("Invalid workflow run/attempt for bundle name")
+    bundle = artifact.with_name(f"{artifact.stem}-vmdk{suffix}.zip")
+    with tempfile.TemporaryDirectory(prefix=".bundle-", dir=artifact.parent) as temporary:
+        partial = Path(temporary) / bundle.name
+        with zipfile.ZipFile(partial, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+            archive.write(artifact, artifact.name)
+            for name, content in configs.items():
+                archive.writestr(name, content)
+        partial.replace(bundle)
+    return bundle
+
+
+def write_checksum(artifact: Path) -> None:
+    """Write a sha256sum-compatible sidecar while streaming large artifacts."""
+    checksum = hashlib.sha256()
+    with artifact.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            checksum.update(block)
+    artifact.with_name(artifact.name + ".sha256").write_text(
+        f"{checksum.hexdigest()}  {artifact.name}\n")
+
+
 def build(metadata: dict[str, str], kind: str, output: Path) -> None:
     """Assemble a disk and emit checksums/provenance into an empty directory.
 
     A retained payload is pulled by digest and validated when payload_ref is set;
     otherwise the local CLI prepares one. Assembly always uses the original OS
     channel tag locally, so installed systems update from the normal OS channel.
-    No application installers run when consuming a retained payload.
+    No application installers run when consuming a retained payload. VMDK uses
+    a customized manifest in the same pinned builder, exports only the VMDK
+    pipeline, and bundles VM configurations before checksums/metadata are emitted.
+    Host qemu-img validates the result; there is no second disk conversion.
     """
     architecture = metadata["architecture"]
     validate_formats([kind], architecture)
@@ -372,28 +544,44 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
     else:
         # For bootc disks --image-size sets a root minimum before boot partitions.
         extra = ["--image-size", "64 GiB"]
-    run("sudo", "podman", "run", "--rm", "--privileged",
+    container = ["sudo", "podman", "run", "--rm", "--privileged",
         "--security-opt", "label=type:unconfined_t",
         "-v", f"{output}:/output",
-        "-v", "/var/lib/containers/storage:/var/lib/containers/storage",
-        metadata["builder_ref"], "build", image_type, "--arch", ARCHITECTURES[architecture],
+        "-v", "/var/lib/containers/storage:/var/lib/containers/storage"]
+    options = ["--arch", ARCHITECTURES[architecture],
         "--bootc-ref", bootc_ref, "--bootc-default-fs", "btrfs",
-        "--output-dir", "/output", "--output-name", name,
-        "--with-manifest", *extra)
+        "--output-dir", "/output", *extra]
+    if kind == "vmdk":
+        manifest = json.loads(run(*container, metadata["builder_ref"], "manifest",
+                                  "vmdk", *options, capture=True))
+        capacity = configure_vmdk_manifest(manifest, f"{name}.vmdk")
+        manifest_path = output / f"{name}.osbuild-manifest.json"
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+        helper = Path(__file__).resolve().with_name("run-osbuild.sh")
+        run(*container, "--entrypoint", "/bin/bash", "-v", f"{helper}:/run-ct-osbuild.sh:ro",
+            metadata["builder_ref"], "/run-ct-osbuild.sh",
+            f"/output/{manifest_path.name}")
+    else:
+        run(*container, metadata["builder_ref"], "build", image_type, *options,
+            "--output-name", name, "--with-manifest")
     run("sudo", "chown", "-R", f"{os.getuid()}:{os.getgid()}", str(output))
     artifact = output / f"{name}.{kind}"
+    if kind == "vmdk":
+        exported = output / "vmdk" / artifact.name
+        exported.replace(artifact)
+        exported.parent.rmdir()
     if not artifact.is_file() or artifact.stat().st_size == 0:
         raise ValueError(f"Builder did not produce {artifact.name}")
-    # Stream large disk images rather than retaining their contents in memory.
-    checksum = hashlib.sha256()
-    with artifact.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            checksum.update(block)
-    (output / f"{artifact.name}.sha256").write_text(
-        f"{checksum.hexdigest()}  {artifact.name}\n"
-    )
+    format_metadata = {}
+    if kind == "vmdk":
+        validate_vmdk(artifact, capacity)
+        bundle = package_vmdk(artifact, metadata)
+        write_checksum(bundle)
+        format_metadata = {"vmdk_subformat": "monolithicSparse",
+                           "bundle_filename": bundle.name, "bundle_bytes": bundle.stat().st_size}
+    write_checksum(artifact)
     (output / f"{name}.source.json").write_text(
-        json.dumps({**metadata, "format": kind, "filename": artifact.name,
+        json.dumps({**metadata, **format_metadata, "format": kind, "filename": artifact.name,
                     "disk_payload_image_id": payload_id, "artifact_bytes": artifact.stat().st_size,
                     "tools": tools}, indent=2) + "\n"
     )

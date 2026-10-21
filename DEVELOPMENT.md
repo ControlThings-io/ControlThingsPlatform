@@ -449,9 +449,10 @@ checkout or the disk generation date. For example:
 - `controlthingsplatform-latest-20261015-5118339-amd64.qcow2`
 - `controlthingsplatform-latest-20261015-5118339-amd64.vmdk`
 
-At least one format must be selected. VMDK is restricted to AMD64 for VMware
-Workstation; selecting ARM64 with VMDK fails before payload preparation. VMDK
-contains the disk only: create and test your VM configuration separately.
+At least one format must be selected. VMDK is restricted to AMD64; selecting
+ARM64 with VMDK fails before payload preparation. It uses `monolithicSparse` and
+is distributed in a compressed bundle with VMware configuration; latest-channel
+bundles also include VirtualBox configuration, as described below.
 The previous workflow `format` input has been replaced; CLI/API dispatch callers
 must use boolean `qcow2`, `iso`, and `vmdk` inputs. For example, a VMDK-only run
 sets `qcow2=false`, `iso=false`, and `vmdk=true`.
@@ -491,13 +492,22 @@ container into ARM64. The container workflow currently builds AMD64 only, and
 the inspected `latest` tag has no ARM64 payload. Publish an ARM64 source before
 using that platform; the resolver fails early when it is missing.
 
-Each download includes a `.sha256` file, `.source.json` metadata, and an osbuild
-manifest. Verify a downloaded image with `sha256sum -c FILENAME.sha256`.
-Metadata records the original OS digest, disk-only payload image ID, tool versions,
-requested tag, update reference, builder, and workflow run. Same-day container
-rebuilds can reuse date/hash tags; the recorded identities distinguish their
-contents. Artifact names also contain the
-workflow run and attempt so formats and repeated runs remain separate.
+VMDK downloads are compressed ZIP64 bundles. Latest-channel bundles (including
+builds from dated `latest` tags) contain only the versioned VMDK,
+`controlthingsplatform.vmx`, and `controlthingsplatform.vbox`. Branch bundles
+contain only the VMDK and VMX. GitHub uploads the prebuilt ZIP directly without
+another archive wrapper; a separate `vmdk-metadata` artifact holds the disk and
+ZIP `.sha256` files, `.source.json`, and executed OSBuild manifest. Optional S3
+uploads place that same ZIP and the metadata/checksum files alongside each other;
+the unpacked VMDK is not uploaded separately. ISO/QCOW2 downloads retain their
+existing image-plus-metadata layout.
+
+After placing a checksum file beside its corresponding ZIP or extracted disk,
+verify it with `sha256sum -c FILENAME.sha256`. Metadata records the original OS
+digest, disk-only payload image ID, tool versions, requested tag, update reference,
+builder, and workflow run. Same-day container rebuilds can reuse date/hash tags;
+the recorded identities distinguish their contents. CI bundle names also contain
+the workflow run and attempt so repeated runs remain separate.
 
 Installed systems follow their source channel: `latest` updates to `latest`,
 `ics410_l01` updates to `ics410_l01`, and `ics410-l01` updates to `ics410-l01`.
@@ -518,11 +528,47 @@ on the [upstream generic ISO example](https://osbuild.org/docs/developer-guide/p
 Its kickstart explicitly selects the embedded payload and channel update
 reference. The installer environment does not become the installed OS.
 
-QCOW2 and VMDK use the new CLI's `--image-size "64 GiB"` root minimum and Btrfs default,
-allowing space for the preinstalled Homebrew and Flatpak stores. VMDK uses the
-native `vmdk` builder target and shares QCOW2’s assembly path; it is not converted
-from a QCOW2 artifact. The local legacy
-disk configuration also uses a 64 GiB root minimum.
+QCOW2 and VMDK use the new CLI's `--image-size "64 GiB"` root minimum and Btrfs
+default, allowing space for the preinstalled Homebrew and Flatpak stores. For
+VMDK, assembly generates a manifest with the pinned builder's `manifest vmdk`
+command, changes the VMDK QEMU stage to `monolithicSparse` with `compression=false`,
+and executes only the `vmdk` export and its dependencies. The VMDK stage writes
+the versioned filename directly from the raw disk. There is no intermediate
+QCOW2 or streamOptimized disk and no second VMDK conversion. The published
+manifest records the actual sparse build options. See the
+[OSBuild QEMU stage](https://osbuild.org/docs/developer-guide/projects/osbuild/modules/stages/org.osbuild.qemu/).
+
+The [container runner](scripts/run-osbuild.sh) preserves the pinned image-builder
+87.0.0 container setup for SELinux labels and dynamic loop devices. Review it
+against upstream `pkg/setup/setup.go` when changing the builder pin. Host
+`qemu-img` (`qemu-utils` on Ubuntu) validates capacity, subformat, uncompressed
+extents and a self-contained disk before packaging.
+
+The build reads the [VM templates](disk_config/virtualization/) without editing
+them. Generated VMX copies use the relative versioned disk basename and display
+`ControlThings Platform` for latest or `UPPERCASE_BRANCH - ControlThings Platform`
+for branch channels. Generated VBOX copies use the same basename, the VMDK's
+`ddb.uuid.image` in both disk references, and a fresh machine UUID per build. If
+the disk lacks a VirtualBox media UUID, assembly initializes it in the reserved
+descriptor before checksumming. This is distinct from VMware's UUID and filesystem
+UUIDs. Both templates default to two vCPUs; VMware presents one socket/two cores.
+All other template settings and line endings are preserved.
+
+The bundle uses Deflate level 6 and ZIP64 for large disks. Compression reduces
+download size; the extracted writable disk remains larger than streamOptimized.
+Allow space for OSBuild's raw disk/cache and output, then the output plus ZIP during
+packaging. Temporary ZIPs are removed on packaging failure. Disk and ZIP checksums
+and source metadata are emitted after successful packaging; `artifact_bytes`
+describes the disk, while `bundle_filename`/`bundle_bytes` describe the download.
+Local output retains the unpacked VMDK for inspection.
+
+Run `python3 tests/check_build_disk.py`, `python3 tests/check_disk_payload_reuse.py`,
+`python3 tests/check_vmdk.py`, and `python3 tests/check_osbuild_runner.py` for relevant
+checks. The real small-disk test needs `qemu-img` and `qemu-io` and uses the local
+OSBuild QEMU stage when installed. Mocked container/registry checks do not establish
+full image or guest boot success; see [current validation](docs/STATUS.md).
+
+The local legacy disk configuration also uses a 64 GiB root minimum.
 The existing `just build-iso`/`just build-qcow2` recipes and
 `disk_config/iso.toml`/`disk_config/disk.toml` still use the legacy local builder;
 this migration covers the GitHub disk workflow only.

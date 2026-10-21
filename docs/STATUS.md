@@ -15,7 +15,7 @@ and `DECISIONS.md`, not these shared files.
   and decisions in DECISIONS. Content and whitespace review passed.
 
 - Implemented the Plasma Login Manager default background change to Aquila Aurea
-  Machina on 2026-10-20 (uncommitted; based on `d84ff91`). The build updates only
+  Machina on 2026-10-20 (committed as `f5f079b`). The build updates only
   `Image` and `PreviewImage` in Aurora's `/usr/lib/plasmalogin/defaults.conf`, using
   the existing wallpaper package, with required-file/asset guards. Administrator
   overrides in `/etc/plasmalogin.conf` retain precedence. User-supplied VM output
@@ -45,24 +45,36 @@ and `DECISIONS.md`, not these shared files.
   tracking links and revisit criteria are in the decision entry. This is a
   project watch-list item, not a scheduled background monitor.
 
-- Added AMD64 VMDK assembly for VMware Workstation and independent QCOW2/ISO/VMDK
-  workflow checkboxes (`4e88610`). QCOW2 alone defaults on; empty selections
-  and ARM64 VMDK fail before preparation. All selected outputs reuse the same
-  application payload, with native builder output, checksums, metadata, and
-  optional S3 uploads. QCOW2/VMDK share Btrfs and the 64 GiB root minimum.
-  The workflow's old `format` input is replaced by boolean inputs; local CLI
-  preflight retains `both` as an ISO/QCOW2 alias. VM configuration and manual
-  Workstation tests are owned by the user; OVA packaging is not included.
-  Disk orchestration and retained-payload regressions passed with external
-  commands mocked, including all 16 format/architecture selections, VMDK native
-  target/naming/checksums, reuse without preparation, and failure propagation.
-  Workflow shell syntax and whitespace checks passed. Registry inspection and
-  execution of the pinned builder (`9a16a7085eb7…`) succeeded; its generic image
-  listing includes VMDK, but does not expose bootc targets. This does not validate
-  the bootc/Btrfs configuration. No VMDK image, remote CI run, or Workstation boot
-  has been validated. Next: build VMDK from a
-  current source (or matching retained payload), then manually verify boot,
-  apps, offline operation, and persistence across an OS update.
+- Direct monolithicSparse VMDK assembly and VM bundles implemented on 2026-10-21
+  (uncommitted), replacing the uncommitted post-build conversion. The pinned
+  builder generates the manifest; its VMDK stage writes the versioned sparse disk
+  directly. The new runner preserves upstream container setup. Latest ZIPs contain
+  only VMDK/VMX/VBOX; branch ZIPs contain only VMDK/VMX. Generated copies receive
+  channel display names, relative disk basenames, matching VirtualBox media UUIDs,
+  and a fresh VBOX machine UUID per build. The approved VMX CPU edit sets one
+  socket/two cores; VBOX already specifies two CPUs and its source is unchanged.
+  Deflate-6 ZIP64 bundles upload directly to GitHub and S3; JSON and disk/ZIP
+  checksums are separate. README is untouched.
+  Verified the pinned builder CLI layer by SHA-256 and ran its manifest/build help:
+  version 87.0.0, commit `cad701ad3175da7297b20f61775fc269e58d2cfc`. Reviewed its
+  exact container setup source and the pinned upload action's `archive: false`
+  support. The previously downloaded full manifest passes local OSBuild schema
+  validation after customization (70,321,700,864-byte capacity).
+  Real local OSBuild QEMU-stage checks passed for raw-to-monolithicSparse output,
+  sector equality, write/read support, descriptor-only UUID initialization and
+  preservation, compressed ZIP64 bundle membership/content, generated configurations,
+  checksums and malformed input/archive-write failures. Disk orchestration,
+  retained payload regressions, mocked runner setup/failure boundaries and workflow
+  upload filters passed. Shell syntax and whitespace review passed. These tests
+  do not establish privileged container or
+  remote CI success. No new full image build or guest boot was performed.
+  User-reported monolithicSparse VMware and VirtualBox tests passed on earlier
+  disks; exact tested artifact identities are unrecorded. Original native VMDK
+  failures were traced to streamOptimized output (course run `39360470160`,
+  attempt 1). Next: reuse a retained payload for latest and branch builds, measure
+  runner disk space and ZIP size, verify exact downloads/checksums, and boot the
+  generated VMX/VBOX on Windows 11 hosts, including a lower-end laptop. See
+  [build and packaging details](../DEVELOPMENT.md#disk-builder-and-configuration).
 
 - Removed the manual tool installer's `pkexec` wrapper (`cd57dc9`). System
   Flatpak remote/install commands now run as the Brew owner through native
