@@ -184,6 +184,8 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                 assert not any(cmd[:2] == ("qemu-img", "convert") for cmd in commands)
                 if kind == "vmdk":
                     assert saved["vmdk_subformat"] == "monolithicSparse"
+                    runner = next(cmd for cmd in commands if '/run-ct-osbuild.sh' in cmd)
+                    assert str(Path('scripts/export-vmdk.py').resolve()) + ':/run-ct-export.py:ro' in runner
                     assert saved["bundle_filename"].endswith(".7z")
                     assert (output / saved["bundle_filename"]).is_file()
                     assert not list(output.glob(".bundle-*"))

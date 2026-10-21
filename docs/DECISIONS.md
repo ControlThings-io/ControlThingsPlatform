@@ -97,6 +97,24 @@ conversion implementation. Two native builds failed guest writes in VMware;
 user testing confirmed monolithicSparse works in VMware and VirtualBox. These
 reports support the subformat choice, not validation of the revised workflow.
 
+Accepted export revision — 2026-10-21: the full-size run `39663118651`
+completed VMDK assembly but exhausted storage during OSBuild's export copy.
+Use a disposable OSBuild store under the mounted output directory and replace
+only the standard CLI's export callback with a single-file hard-link export.
+Preserve CLI validation, pipeline dependency selection and build failures.
+Require exactly one regular VMDK and a new export destination; fail on a
+cross-filesystem link rather than copying. Remove the private store on runner
+exit before host UUID changes and compression. This avoids duplicate export
+allocation and releases build intermediates before packaging. The adapter uses
+OSBuild's Python CLI/object-store interfaces; review against the pinned version
+when updating the builder. Full-size capacity remains a CI validation item.
+
+The Fedora 44 ISO installer pin was refreshed to an available multiarchitecture
+index on 2026-10-21 after the prior digest became unavailable. AMD64/ARM64
+registry metadata checks do not establish installer build or boot compatibility.
+Mirroring the installer base into a controlled registry remains a proposal;
+no mirror or automatic pin refresh is implemented.
+
 Latest-channel bundles include exactly the versioned VMDK plus the fixed names
 `controlthingsplatform.vmx` and `controlthingsplatform.vbox`; branch bundles omit
 VBOX. Dated source tags follow their originating channel. Generate configuration

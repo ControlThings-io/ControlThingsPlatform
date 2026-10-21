@@ -46,8 +46,8 @@ and `DECISIONS.md`, not these shared files.
   project watch-list item, not a scheduled background monitor.
 
 - VMDK `.7z` packaging and direct QCOW2 downloads implemented on 2026-10-21
-  (uncommitted), extending the direct monolithicSparse/VM bundle work committed
-  as `fb67d62`. VMDK now uses host `7zz`, LZMA2 level 5, a 32 MiB dictionary,
+  (committed as `6d187a6`), extending the direct monolithicSparse/VM bundle work
+  committed as `fb67d62`. VMDK now uses host `7zz`, LZMA2 level 5, a 32 MiB dictionary,
   two threads and non-solid mode. Temporary hard-link staging avoids another
   disk copy; compression failures remove partial archives. Latest bundles contain
   VMDK/VMX/VBOX; branch bundles contain VMDK/VMX. The same `.7z` uploads directly
@@ -63,16 +63,53 @@ and `DECISIONS.md`, not these shared files.
   compression cleanup, CI/local naming, mocked build/registry failures, workflow
   upload routing/S3 filters and embedded Bash syntax. Local 7zz version: 26.04.
   These checks use small fixtures and mocked container/registry commands; they
-  do not establish full-size performance, privileged builds or remote CI success.
-  Content/link and whitespace review passed. No full image build or guest boot
-  was performed. User-reported monolithicSparse VMware/VirtualBox tests predate
+  do not establish full-size performance or guest boot success; subsequent CI
+  evidence is recorded below. Content/link and whitespace review passed.
+  User-reported monolithicSparse VMware/VirtualBox tests predate
   `fb67d62`; exact artifact identities are unrecorded. Original native failures
   used streamOptimized output (course run `39360470160`, attempt 1).
-  Next: reuse a retained payload for latest/branch VMDK and QCOW2 CI builds,
-  measure runner space, compression time/memory and archive size, verify exact
-  direct downloads/checksums and metadata ZIP contents, and boot the generated
-  VMX/VBOX on Windows 11 hosts including a lower-end laptop. See
+  CI attempts at `6d187a6`, runs
+  [39659636082](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/39659636082)
+  and [39662488106](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/39662488106),
+  failed before preparation/assembly: the ISO dependency preflight received
+  `manifest unknown` for the Fedora installer digest pinned in
+  `disk_config/installer/Containerfile`. All three formats were selected, so the
+  shared preflight blocked them together; packaging/upload changes were not reached.
+  Live Skopeo metadata checks on 2026-10-21 reproduced the missing digest and
+  confirmed that the current Fedora 44 tag resolves for linux/amd64. This does not
+  establish why the old manifest disappeared or validate a replacement ISO build.
+  The QCOW2/VMDK-only run
+  [39663118651](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/39663118651)
+  passed resolution and payload preparation. QCOW2 assembly, direct disk upload
+  and the separate three-file metadata ZIP upload succeeded. VMDK's OSBuild
+  manifest finished successfully, then export failed with `No space left on device`
+  while copying the staged VMDK from the OSBuild store into `/output/vmdk` using
+  `cp --reflink=auto -a`. The 7z packaging/checksum and upload steps were not reached.
+  Jobs use separate runners; selecting QCOW2 did not consume the VMDK runner's
+  storage. Logs establish export-time space exhaustion, but do not quantify peak
+  allocated storage or the extra capacity needed. Download/guest checks remain.
+  Implemented the export/storage repair (uncommitted): the VMDK runner creates
+  a private store under `/output`, uses a guarded hard-link export adapter, and
+  removes the store on success/failure before UUID updates and 7z packaging.
+  Export logs report logical/allocated disk size and free space. Refreshed the
+  ISO installer to Fedora 44 index `sha256:28f842889ffee5a2bfc1c1bd742a15c13b2f73a41a492312410a961e457e8d63`.
+  Live dependency preflight passed for AMD64 and ARM64. The sparse 5 GiB export
+  regression passed with local OSBuild 193 and OSBuild 194 inside the exact pinned
+  builder: same inode/allocation, content survival after store cleanup, and
+  rejection of symlinks, extra files, existing destinations and failed links.
+  Inspected the pinned runtime's export callback contract. Mocked runner checks
+  passed cleanup/setup/failure boundaries; disk orchestration, retained payload
+  and real VMDK packaging regressions passed. Full privileged assembly, peak disk
+  measurements, refreshed ISO build/install, and guest boot remain unvalidated.
+  Next: commit/push when authorized, then dispatch a new workflow revision reusing
+  the successful retained payload from run `39663118651`; rerunning its old jobs
+  would use the old code. Verify VMDK export/7z packaging, exact downloads/checksums,
+  refreshed ISO installation and guest boot, including lower-end Windows hosts. See
   [build and packaging details](../DEVELOPMENT.md#disk-builder-and-configuration).
+  Retry inputs from the successful payload descriptor: source tag
+  `latest-20261021-6d187a6`, payload
+  `ghcr.io/controlthings-io/controlthingsplatform-disk-payload@sha256:5b9f41f506571b34b2e6fc7a1fcf591eca4bfcbfb4b05b346531eb336aa1fb81`.
+  Payload retention remains manual; no new publication or CI dispatch was performed.
 
 - Removed the manual tool installer's `pkexec` wrapper (`cd57dc9`). System
   Flatpak remote/install commands now run as the Brew owner through native

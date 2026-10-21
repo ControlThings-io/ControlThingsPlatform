@@ -524,7 +524,9 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
     No application installers run when consuming a retained payload. VMDK uses
     a customized manifest in the same pinned builder, exports only the VMDK
     pipeline, and bundles VM configurations before checksums/metadata are emitted.
-    Host qemu-img validates the result; there is no second disk conversion.
+    The runner hard-links the completed disk out of a disposable store on the
+    output filesystem and removes that store before packaging. Host qemu-img
+    validates the result; there is no second disk conversion.
     """
     architecture = metadata["architecture"]
     validate_formats([kind], architecture)
@@ -572,7 +574,9 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
         manifest_path = output / f"{name}.osbuild-manifest.json"
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
         helper = Path(__file__).resolve().with_name("run-osbuild.sh")
+        exporter = Path(__file__).resolve().with_name("export-vmdk.py")
         run(*container, "--entrypoint", "/bin/bash", "-v", f"{helper}:/run-ct-osbuild.sh:ro",
+            "-v", f"{exporter}:/run-ct-export.py:ro",
             metadata["builder_ref"], "/run-ct-osbuild.sh",
             f"/output/{manifest_path.name}")
     else:

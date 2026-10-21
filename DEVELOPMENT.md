@@ -549,7 +549,18 @@ manifest records the actual sparse build options. See the
 
 The [container runner](scripts/run-osbuild.sh) preserves the pinned image-builder
 87.0.0 container setup for SELinux labels and dynamic loop devices. Review it
-against upstream `pkg/setup/setup.go` when changing the builder pin. Host
+against upstream `pkg/setup/setup.go` when changing the builder pin. Its
+[export adapter](scripts/export-vmdk.py) preserves the standard OSBuild CLI but
+replaces its export callback for the single VMDK. The runner creates a private
+`.osbuild-store-*` directory under the mounted output directory so the completed
+disk can be hard-linked into `output/vmdk` on the same filesystem. This avoids
+OSBuild's default export copy, which exhausted CI storage in run `39663118651`.
+The adapter rejects unexpected files and cross-filesystem links without a copy
+fallback. The runner removes its temporary store on success or failure, releasing
+intermediates before host UUID updates, checksumming and 7z compression. Review
+the adapter's CLI/object-store contracts against the pinned OSBuild version
+(currently 194) when changing the builder pin. Export logs include logical and
+allocated disk bytes and free output space. Host
 `qemu-img` (`qemu-utils` on Ubuntu) validates capacity, subformat, uncompressed
 extents and a self-contained disk before packaging.
 
@@ -571,17 +582,22 @@ compression time, memory and download size still need measurement.
 
 Compression reduces download size; the extracted writable disk remains larger
 than streamOptimized. Allow space for OSBuild's raw disk/cache and output, then
-the output plus `.7z` during packaging. A temporary hard-link stages the source
-disk without another copy. Partial archives and temporary files are removed on
+the output plus `.7z` during packaging. Export adds a hard link rather than a
+second disk allocation; full-size runner capacity still requires CI measurement.
+Packaging also stages the source disk with a temporary hard link. Partial archives and temporary files are removed on
 packaging failure. Disk and bundle checksums and source metadata are emitted
 after successful packaging; `artifact_bytes` describes the disk, while
 `bundle_filename`/`bundle_bytes` describe the download. Local output retains the
 unpacked VMDK for inspection.
 
 Run `python3 tests/check_build_disk.py`, `python3 tests/check_disk_payload_reuse.py`,
-`python3 tests/check_vmdk.py`, and `python3 tests/check_osbuild_runner.py` for relevant
-checks. The VMDK checks need `7zz`; the real small-disk test also needs `qemu-img` and
-`qemu-io` and uses the local OSBuild QEMU stage when installed. Mocked container/registry checks do not establish
+`python3 tests/check_vmdk.py`, `python3 tests/check_osbuild_runner.py`, and
+`python3 tests/check_vmdk_export.py` for relevant checks. The export regression
+requires the OSBuild Python package and verifies sparse-file allocation and
+content after real object-store cleanup; it can also run inside the pinned builder.
+The VMDK checks need `7zz`; the real small-disk test also needs `qemu-img` and
+`qemu-io` and uses the local OSBuild QEMU stage when installed. Mocked
+container/registry checks do not establish
 full image or guest boot success; see [current validation](docs/STATUS.md).
 
 The local legacy disk configuration also uses a 64 GiB root minimum.
