@@ -1,7 +1,7 @@
 """Check direct VMDK output, media UUIDs and compressed VM bundles.
 
 Run from the repository root with python3 tests/check_vmdk.py. Requires qemu-img,
-qemu-io and 7zz. Uses a real local OSBuild QEMU stage when installed, otherwise QEMU
+qemu-io and 7zz or 7z. Uses a real local OSBuild QEMU stage when installed, otherwise QEMU
 with its documented stage arguments. This is small-disk validation, not OSBuild
 container integration or VMware/VirtualBox boot validation.
 """
@@ -37,6 +37,23 @@ def rejected(callback):
     else:
         raise AssertionError('Invalid input accepted')
 
+
+# Ubuntu provides 7z; standalone installations often provide 7zz.
+for available in ({'7zz': '/tools/7zz'}, {'7z': '/tools/7z'},
+                  {'7zz': '/tools/7zz', '7z': '/tools/7z'}):
+    with patch.object(disk.shutil, 'which', side_effect=available.get):
+        assert disk.sevenzip_command() == available.get('7zz', available.get('7z'))
+with tempfile.TemporaryDirectory() as temporary:
+    output = Path(temporary) / 'output'
+    with patch.object(disk.shutil, 'which', return_value=None), patch.object(disk, 'run') as run:
+        try:
+            disk.build({'architecture': 'amd64'}, 'vmdk', output)
+        except FileNotFoundError as error:
+            assert '7zz or 7z' in str(error)
+        else:
+            raise AssertionError('Missing compressor accepted')
+        run.assert_not_called()
+        assert not output.exists()
 
 manifest = vmdk_manifest()
 original = copy.deepcopy(manifest)
@@ -126,12 +143,12 @@ with tempfile.TemporaryDirectory(prefix='ct-vmdk-') as temporary:
                     'workflow_run': '12345', 'workflow_attempt': str(len(machine_ids) + 1)}
         bundle = disk.package_vmdk(artifact, metadata)
         assert bundle.name.endswith(f'-vmdk-12345-{metadata["workflow_attempt"]}.7z')
-        subprocess.run(['7zz', 't', str(bundle)], check=True, stdout=subprocess.DEVNULL)
-        details = subprocess.check_output(['7zz', 'l', '-slt', str(bundle)], text=True)
+        subprocess.run([disk.sevenzip_command(), 't', str(bundle)], check=True, stdout=subprocess.DEVNULL)
+        details = subprocess.check_output([disk.sevenzip_command(), 'l', '-slt', str(bundle)], text=True)
         assert 'Type = 7z' in details and 'Method = LZMA2' in details
         assert 'Solid = -' in details
         with tempfile.TemporaryDirectory(dir=root) as extracted:
-            subprocess.run(['7zz', 'x', str(bundle), f'-o{extracted}'],
+            subprocess.run([disk.sevenzip_command(), 'x', str(bundle), f'-o{extracted}'],
                            check=True, stdout=subprocess.DEVNULL)
             members = Path(extracted)
             expected = {artifact.name, 'controlthingsplatform.vmx'}

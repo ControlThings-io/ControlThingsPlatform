@@ -47,7 +47,7 @@ and `DECISIONS.md`, not these shared files.
 
 - VMDK `.7z` packaging and direct QCOW2 downloads implemented on 2026-10-21
   (committed as `6d187a6`), extending the direct monolithicSparse/VM bundle work
-  committed as `fb67d62`. VMDK now uses host `7zz`, LZMA2 level 5, a 32 MiB dictionary,
+  committed as `fb67d62`. VMDK uses host 7-Zip, LZMA2 level 5, a 32 MiB dictionary,
   two threads and non-solid mode. Temporary hard-link staging avoids another
   disk copy; compression failures remove partial archives. Latest bundles contain
   VMDK/VMX/VBOX; branch bundles contain VMDK/VMX. The same `.7z` uploads directly
@@ -88,7 +88,7 @@ and `DECISIONS.md`, not these shared files.
   Jobs use separate runners; selecting QCOW2 did not consume the VMDK runner's
   storage. Logs establish export-time space exhaustion, but do not quantify peak
   allocated storage or the extra capacity needed. Download/guest checks remain.
-  Implemented the export/storage repair (uncommitted): the VMDK runner creates
+  Implemented the export/storage repair (committed as `9d8568d`): the VMDK runner creates
   a private store under `/output`, uses a guarded hard-link export adapter, and
   removes the store on success/failure before UUID updates and 7z packaging.
   Export logs report logical/allocated disk size and free space. Refreshed the
@@ -99,12 +99,22 @@ and `DECISIONS.md`, not these shared files.
   rejection of symlinks, extra files, existing destinations and failed links.
   Inspected the pinned runtime's export callback contract. Mocked runner checks
   passed cleanup/setup/failure boundaries; disk orchestration, retained payload
-  and real VMDK packaging regressions passed. Full privileged assembly, peak disk
-  measurements, refreshed ISO build/install, and guest boot remain unvalidated.
-  Next: commit/push when authorized, then dispatch a new workflow revision reusing
-  the successful retained payload from run `39663118651`; rerunning its old jobs
-  would use the old code. Verify VMDK export/7z packaging, exact downloads/checksums,
-  refreshed ISO installation and guest boot, including lower-end Windows hosts. See
+  and real VMDK packaging regressions passed.
+  Run [39682536214](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/39682536214)
+  at `9d8568d` confirms full privileged VMDK assembly and hard-link export succeeded:
+  30,131,027,968 logical bytes, 30,126,514,176 allocated bytes and 9,433,157,632
+  output bytes free at export. It then failed before compression because packaging
+  invoked `7zz`; Ubuntu's installed `7zip` 23.01+dfsg-11 package provides `7z`.
+  Verified the exact Ubuntu package contents. Fixed executable discovery to accept
+  `7zz` or `7z` and reject missing tools before any VMDK assembly (uncommitted).
+  Regression checks cover both command names and missing-tool early failure.
+  VMDK integrity/extraction/checksums, disk orchestration and retained payload
+  checks passed using the actual Ubuntu 23.01 binary on a PATH without `7zz`.
+  Full-size compression/upload, refreshed ISO build/install and guest boot remain
+  unvalidated. Next: commit/push when authorized, then dispatch a new workflow
+  revision using the retained payload below; rerunning old jobs uses old code.
+  Verify VMDK 7z packaging and exact downloads/checksums, refreshed ISO installation
+  and guest boot. See
   [build and packaging details](../DEVELOPMENT.md#disk-builder-and-configuration).
   Retry inputs from the successful payload descriptor: source tag
   `latest-20261021-6d187a6`, payload

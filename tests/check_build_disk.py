@@ -1,6 +1,6 @@
 """Check disk selection/orchestration with ``python3 tests/check_build_disk.py``.
 
-Requires Python 3.10+, PyYAML and 7zz; runs without registry access or root.
+Requires Python 3.10+, PyYAML and 7zz or 7z; runs without registry access or root.
 Mocks container/registry commands and uses real 7z packaging, exercising
 real resolution, file naming, checksums, failure propagation, and workflow shell
 syntax. Does not establish image-builder, Anaconda, or VM integration success.

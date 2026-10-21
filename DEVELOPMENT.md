@@ -510,7 +510,7 @@ to receive the QCOW2 and individual metadata/checksum files. ISO packaging is
 unchanged: GitHub provides the image and metadata together in an uncompressed
 ZIP, while S3 receives the individual files.
 
-Extract VMDK bundles with a 7z-capable tool, for example `7zz x FILENAME.7z`.
+Extract VMDK bundles with a 7z-capable tool, for example `7z x FILENAME.7z`.
 After placing a checksum file beside its corresponding `.7z`, QCOW2 or extracted
 disk, verify it with `sha256sum -c FILENAME.sha256`. Metadata records the original
 OS digest, disk-only payload image ID, tool versions, requested tag, update
@@ -574,7 +574,8 @@ descriptor before checksumming. This is distinct from VMware's UUID and filesyst
 UUIDs. Both templates default to two vCPUs; VMware presents one socket/two cores.
 All other template settings and line endings are preserved.
 
-VMDK packaging requires host `7zz` (`7zip` on Ubuntu 24.04). Bundles use 7z/LZMA2
+VMDK packaging requires host `7zz` or `7z` (`7zip` on Ubuntu 24.04
+provides `7z`). The build checks availability before starting VMDK assembly. Bundles use 7z/LZMA2
 level 5, a 32 MiB dictionary, and two compression threads. Solid mode is disabled
 so extracting a small VM configuration does not require decompressing the disk.
 These explicit settings limit resource costs across 7-Zip versions; full-size
@@ -595,7 +596,7 @@ Run `python3 tests/check_build_disk.py`, `python3 tests/check_disk_payload_reuse
 `python3 tests/check_vmdk_export.py` for relevant checks. The export regression
 requires the OSBuild Python package and verifies sparse-file allocation and
 content after real object-store cleanup; it can also run inside the pinned builder.
-The VMDK checks need `7zz`; the real small-disk test also needs `qemu-img` and
+The VMDK checks need `7zz` or `7z`; the real small-disk test also needs `qemu-img` and
 `qemu-io` and uses the local OSBuild QEMU stage when installed. Mocked
 container/registry checks do not establish
 full image or guest boot success; see [current validation](docs/STATUS.md).

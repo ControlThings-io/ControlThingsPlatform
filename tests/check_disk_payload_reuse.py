@@ -1,6 +1,6 @@
 """Exercise retained payload identity/reuse without downloads, root or installers.
 
-Run with python3; requires 7zz for real VMDK packaging. Registry/Podman are command
+Run with python3; requires 7zz or 7z for real VMDK packaging. Registry/Podman are command
 fixtures. This verifies failure
 boundaries and preparation/assembly separation, not registry access permissions
 or a real bootc import. The small real OCI transport check lives separately.

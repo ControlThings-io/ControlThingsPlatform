@@ -132,6 +132,8 @@ Accepted packaging revision — 2026-10-21: VMDK distribution must use `.7z`,
 a user requirement for the destination environment, with no build-time format
 option. Use one prebuilt 7z/LZMA2 archive for GitHub and S3. The pinned
 upload-artifact action supports `archive: false` for direct single-file uploads.
+Accept both standalone `7zz` and distribution `7z` executable names; check
+availability before VMDK assembly. Ubuntu 24.04's `7zip` package provides `7z`.
 Keep the existing VM membership and disk format. Implementation defaults are
 level 5, a 32 MiB dictionary, two threads, and non-solid mode to limit resource
 costs and allow configurations to extract independently of the large disk.

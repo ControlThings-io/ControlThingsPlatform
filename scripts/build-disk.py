@@ -9,7 +9,7 @@ Usage: build-disk.py resolve IMAGE TAG BUILDER OUTPUT_JSON [--arch {amd64,arm64}
        build-disk.py formats --arch ARCH --qcow2 BOOL --iso BOOL --vmdk BOOL
 
 Requires Skopeo for resolution, sudo/Podman for builds, and host qemu-img and
-7zz for VMDK validation and packaging. Resolution inspects
+7zz or 7z for VMDK validation and packaging. Resolution inspects
 immutable metadata after selecting a digest; all selected jobs consume that JSON.
 Preparation populates a disk-only image's /var with Homebrew and Flatpaks.
 CI retains it in a separate registry package, then assembly pulls that digest
@@ -27,6 +27,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import struct
 import subprocess
 import tempfile
@@ -479,6 +480,18 @@ def workflow_suffix(metadata: dict[str, str]) -> str:
     return suffix
 
 
+def sevenzip_command() -> str:
+    """Find 7-Zip on PATH, accepting standalone 7zz and Ubuntu's 7z command.
+
+    Return its executable path or fail before expensive VMDK assembly. Packaging
+    also checks this dependency when invoked independently of build().
+    """
+    executable = shutil.which("7zz") or shutil.which("7z")
+    if executable is None:
+        raise FileNotFoundError("VMDK packaging requires 7zz or 7z; install the 7zip package")
+    return executable
+
+
 def package_vmdk(artifact: Path, metadata: dict[str, str]) -> Path:
     """Create a 7z/LZMA2 bundle with only the disk and selected VM configs.
 
@@ -490,6 +503,7 @@ def package_vmdk(artifact: Path, metadata: dict[str, str]) -> Path:
     original disk locally and metadata/checksums separate from archive members.
     Return the completed archive path after atomically moving it into place.
     """
+    compressor = sevenzip_command()
     configs = vm_configurations(artifact, channel_for(metadata["source_tag"]))
     suffix = workflow_suffix(metadata)
     bundle = artifact.with_name(f"{artifact.stem}-vmdk{suffix}.7z")
@@ -498,7 +512,7 @@ def package_vmdk(artifact: Path, metadata: dict[str, str]) -> Path:
         os.link(artifact, Path(temporary) / artifact.name)
         for name, content in configs.items():
             (Path(temporary) / name).write_bytes(content)
-        subprocess.run(["7zz", "a", "-t7z", "-m0=lzma2", "-mx=5", "-md=32m",
+        subprocess.run([compressor, "a", "-t7z", "-m0=lzma2", "-mx=5", "-md=32m",
                         "-mmt=2", "-ms=off", str(partial.resolve()), "--",
                         artifact.name, *configs], cwd=temporary, check=True)
         partial.replace(bundle)
@@ -530,6 +544,8 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
     """
     architecture = metadata["architecture"]
     validate_formats([kind], architecture)
+    if kind == "vmdk":
+        sevenzip_command()
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     if any(output.iterdir()):
