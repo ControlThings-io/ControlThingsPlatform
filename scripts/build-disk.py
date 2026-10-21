@@ -8,8 +8,8 @@ Usage: build-disk.py resolve IMAGE TAG BUILDER OUTPUT_JSON [--arch {amd64,arm64}
        build-disk.py preflight INPUT_JSON {iso,qcow2,vmdk,both} [...]
        build-disk.py formats --arch ARCH --qcow2 BOOL --iso BOOL --vmdk BOOL
 
-Requires Skopeo for resolution, sudo/Podman for builds, and host qemu-img for
-VMDK validation. Resolution inspects
+Requires Skopeo for resolution, sudo/Podman for builds, and host qemu-img and
+7zz for VMDK validation and packaging. Resolution inspects
 immutable metadata after selecting a digest; all selected jobs consume that JSON.
 Preparation populates a disk-only image's /var with Homebrew and Flatpaks.
 CI retains it in a separate registry package, then assembly pulls that digest
@@ -32,7 +32,6 @@ import subprocess
 import tempfile
 import uuid
 import xml.etree.ElementTree as ET
-import zipfile
 
 ARCHITECTURES = {"amd64": "x86_64", "arm64": "aarch64"}
 FORMATS = ("qcow2", "iso", "vmdk")
@@ -470,26 +469,38 @@ def vm_configurations(artifact: Path, channel: str) -> dict[str, bytes]:
     return configs
 
 
-def package_vmdk(artifact: Path, metadata: dict[str, str]) -> Path:
-    """Create a ZIP64/Deflate-6 bundle with only the disk and selected VM configs.
+def workflow_suffix(metadata: dict[str, str]) -> str:
+    """Return a validated run/attempt filename suffix, or empty for local builds."""
+    if not metadata.get("workflow_run"):
+        return ""
+    suffix = f'-{metadata["workflow_run"]}-{metadata["workflow_attempt"]}'
+    if not re.fullmatch(r"-\d+-\d+", suffix):
+        raise ValueError("Invalid workflow run/attempt for artifact name")
+    return suffix
 
-    Stage the ZIP in a temporary sibling directory; failures remove partial ZIPs.
-    The same prebuilt ZIP is uploaded directly to GitHub and S3. Keep the original
-    disk locally; metadata/checksums are separate files, never ZIP members.
+
+def package_vmdk(artifact: Path, metadata: dict[str, str]) -> Path:
+    """Create a 7z/LZMA2 bundle with only the disk and selected VM configs.
+
+    Use level 5, a 32 MiB dictionary and two threads to bound compression costs.
+    Disable solid mode so configurations can be extracted independently of the
+    large disk. Hard-link the disk into a temporary sibling directory to archive
+    basenames without copying its bytes. Failed commands propagate and remove
+    partial archives. Upload the same prebuilt bundle to GitHub and S3; keep the
+    original disk locally and metadata/checksums separate from archive members.
+    Return the completed archive path after atomically moving it into place.
     """
     configs = vm_configurations(artifact, channel_for(metadata["source_tag"]))
-    suffix = ""
-    if metadata.get("workflow_run"):
-        suffix = f'-{metadata["workflow_run"]}-{metadata["workflow_attempt"]}'
-        if not re.fullmatch(r"-\d+-\d+", suffix):
-            raise ValueError("Invalid workflow run/attempt for bundle name")
-    bundle = artifact.with_name(f"{artifact.stem}-vmdk{suffix}.zip")
+    suffix = workflow_suffix(metadata)
+    bundle = artifact.with_name(f"{artifact.stem}-vmdk{suffix}.7z")
     with tempfile.TemporaryDirectory(prefix=".bundle-", dir=artifact.parent) as temporary:
         partial = Path(temporary) / bundle.name
-        with zipfile.ZipFile(partial, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
-            archive.write(artifact, artifact.name)
-            for name, content in configs.items():
-                archive.writestr(name, content)
+        os.link(artifact, Path(temporary) / artifact.name)
+        for name, content in configs.items():
+            (Path(temporary) / name).write_bytes(content)
+        subprocess.run(["7zz", "a", "-t7z", "-m0=lzma2", "-mx=5", "-md=32m",
+                        "-mmt=2", "-ms=off", str(partial.resolve()), "--",
+                        artifact.name, *configs], cwd=temporary, check=True)
         partial.replace(bundle)
     return bundle
 
@@ -532,6 +543,9 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
     # Current ControlThings bundles use the standard name without a smoke suffix.
     if tools.get("profile") == "smoke":
         name += "-smoke"
+    # Direct GitHub uploads use the disk basename as the artifact name.
+    if kind == "qcow2":
+        name += workflow_suffix(metadata)
     extra = []
     if kind == "iso":
         image_type, bootc_ref = "bootc-generic-iso", "localhost/controlthings-installer:build"

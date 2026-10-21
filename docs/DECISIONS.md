@@ -83,13 +83,14 @@ preparation. Existing CLI preflight `both` remains an ISO/QCOW2 alias. OVA
 packaging is outside this change.
 
 Accepted replacement — 2026-10-21: build monolithicSparse directly and compress
-the distribution ZIP. The pinned builder generates the manifest; customize only
+the distribution bundle. The pinned builder generates the manifest; customize only
 its VMDK stage's subformat, compression flag and output filename, then execute
 OSBuild's VMDK export in that same builder. Preserve the builder's container
 setup for SELinux and loop devices. Reject unexpected manifest layouts and
 validate final disk capacity/subformat/extents before packaging. This avoids the
 second disk conversion, not OSBuild's normal raw-disk assembly or the larger
-extracted sparse disk. ZIP compression is Deflate level 6 with ZIP64 support.
+extracted sparse disk. The initial Deflate-6 ZIP64 packaging is superseded by
+the 7z decision below.
 
 This supersedes the uncommitted 2026-10-20 native-streamOptimized-to-monolithicSparse
 conversion implementation. Two native builds failed guest writes in VMware;
@@ -109,12 +110,28 @@ Repository templates require explicit approval before edits; placeholders are
 unnecessary. The supplied VBOX template's fixed machine UUID stays in the source;
 each generated copy replaces it.
 
-Use one prebuilt ZIP for GitHub and S3. The pinned upload-artifact action supports
-`archive: false`, so it uploads that ZIP directly. JSON provenance/manifest and
-disk/ZIP SHA-256 files are separate: a metadata artifact on GitHub, sibling objects
-on S3. ISO/QCOW2 packaging is unchanged. Keep the unpacked VMDK in local output
+Accepted packaging revision — 2026-10-21: VMDK distribution must use `.7z`,
+a user requirement for the destination environment, with no build-time format
+option. Use one prebuilt 7z/LZMA2 archive for GitHub and S3. The pinned
+upload-artifact action supports `archive: false` for direct single-file uploads.
+Keep the existing VM membership and disk format. Implementation defaults are
+level 5, a 32 MiB dictionary, two threads, and non-solid mode to limit resource
+costs and allow configurations to extract independently of the large disk.
+These settings are not a measured optimum. Hard-link the disk into temporary
+sibling staging to avoid copying it; failed packaging removes partial archives.
+JSON provenance/manifest and disk/bundle SHA-256 files remain separate: a metadata
+ZIP artifact on GitHub, sibling objects on S3. Keep the unpacked VMDK locally
 but exclude it from VMDK S3 uploads. Bundle names include CI run/attempt to prevent
 collisions. Checksums describe final bytes after media UUID initialization.
+
+QCOW2 uploads directly to GitHub with `archive: false`; move its checksums,
+provenance and manifest into a separate metadata ZIP. This removes the existing
+uncompressed ZIP wrapper without adding a compression step to the disk. Append
+the run/attempt to CI QCOW2 filenames because direct artifact names come from
+the uploaded filename. Local QCOW2 names and S3's individual-file layout remain.
+ISO packaging remains unchanged. This supersedes the earlier VMDK ZIP decision
+and combined QCOW2 image/metadata artifact. See
+[packaging details](../DEVELOPMENT.md#building-disk-images).
 
 Resolve the source once. Derive filename date/hash from its version label and
 record actual digests because same-day tags may be reused and revision labels

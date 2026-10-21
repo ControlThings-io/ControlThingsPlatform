@@ -45,35 +45,33 @@ and `DECISIONS.md`, not these shared files.
   tracking links and revisit criteria are in the decision entry. This is a
   project watch-list item, not a scheduled background monitor.
 
-- Direct monolithicSparse VMDK assembly and VM bundles implemented on 2026-10-21
-  (uncommitted), replacing the uncommitted post-build conversion. The pinned
-  builder generates the manifest; its VMDK stage writes the versioned sparse disk
-  directly. The new runner preserves upstream container setup. Latest ZIPs contain
-  only VMDK/VMX/VBOX; branch ZIPs contain only VMDK/VMX. Generated copies receive
-  channel display names, relative disk basenames, matching VirtualBox media UUIDs,
-  and a fresh VBOX machine UUID per build. The approved VMX CPU edit sets one
-  socket/two cores; VBOX already specifies two CPUs and its source is unchanged.
-  Deflate-6 ZIP64 bundles upload directly to GitHub and S3; JSON and disk/ZIP
-  checksums are separate. README is untouched.
-  Verified the pinned builder CLI layer by SHA-256 and ran its manifest/build help:
-  version 87.0.0, commit `cad701ad3175da7297b20f61775fc269e58d2cfc`. Reviewed its
-  exact container setup source and the pinned upload action's `archive: false`
-  support. The previously downloaded full manifest passes local OSBuild schema
-  validation after customization (70,321,700,864-byte capacity).
-  Real local OSBuild QEMU-stage checks passed for raw-to-monolithicSparse output,
-  sector equality, write/read support, descriptor-only UUID initialization and
-  preservation, compressed ZIP64 bundle membership/content, generated configurations,
-  checksums and malformed input/archive-write failures. Disk orchestration,
-  retained payload regressions, mocked runner setup/failure boundaries and workflow
-  upload filters passed. Shell syntax and whitespace review passed. These tests
-  do not establish privileged container or
-  remote CI success. No new full image build or guest boot was performed.
-  User-reported monolithicSparse VMware and VirtualBox tests passed on earlier
-  disks; exact tested artifact identities are unrecorded. Original native VMDK
-  failures were traced to streamOptimized output (course run `39360470160`,
-  attempt 1). Next: reuse a retained payload for latest and branch builds, measure
-  runner disk space and ZIP size, verify exact downloads/checksums, and boot the
-  generated VMX/VBOX on Windows 11 hosts, including a lower-end laptop. See
+- VMDK `.7z` packaging and direct QCOW2 downloads implemented on 2026-10-21
+  (uncommitted), extending the direct monolithicSparse/VM bundle work committed
+  as `fb67d62`. VMDK now uses host `7zz`, LZMA2 level 5, a 32 MiB dictionary,
+  two threads and non-solid mode. Temporary hard-link staging avoids another
+  disk copy; compression failures remove partial archives. Latest bundles contain
+  VMDK/VMX/VBOX; branch bundles contain VMDK/VMX. The same `.7z` uploads directly
+  to GitHub and S3, with disk/bundle checksums and JSON metadata kept separate.
+  QCOW2 uploads directly to GitHub; checksums, manifest and source metadata move
+  into a separate metadata ZIP. CI QCOW2 filenames include run/attempt for unique
+  direct artifact names. QCOW2 S3 layout and ISO packaging are unchanged. No format
+  option was added. README and VM source templates are untouched.
+  Passed `tests/check_vmdk.py`, `tests/check_build_disk.py` and
+  `tests/check_disk_payload_reuse.py`: real local OSBuild QEMU-stage disk assembly,
+  content/write support, UUID/configuration preservation, 7z integrity/extraction,
+  exact channel membership and extracted bytes, checksums, missing-tool/partial
+  compression cleanup, CI/local naming, mocked build/registry failures, workflow
+  upload routing/S3 filters and embedded Bash syntax. Local 7zz version: 26.04.
+  These checks use small fixtures and mocked container/registry commands; they
+  do not establish full-size performance, privileged builds or remote CI success.
+  Content/link and whitespace review passed. No full image build or guest boot
+  was performed. User-reported monolithicSparse VMware/VirtualBox tests predate
+  `fb67d62`; exact artifact identities are unrecorded. Original native failures
+  used streamOptimized output (course run `39360470160`, attempt 1).
+  Next: reuse a retained payload for latest/branch VMDK and QCOW2 CI builds,
+  measure runner space, compression time/memory and archive size, verify exact
+  direct downloads/checksums and metadata ZIP contents, and boot the generated
+  VMX/VBOX on Windows 11 hosts including a lower-end laptop. See
   [build and packaging details](../DEVELOPMENT.md#disk-builder-and-configuration).
 
 - Removed the manual tool installer's `pkexec` wrapper (`cd57dc9`). System

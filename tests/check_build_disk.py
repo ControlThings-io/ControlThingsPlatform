@@ -1,7 +1,7 @@
 """Check disk selection/orchestration with ``python3 tests/check_build_disk.py``.
 
-Requires Python 3.10+ and PyYAML; runs without registry access or root.
-Mocks only external commands, exercising
+Requires Python 3.10+, PyYAML and 7zz; runs without registry access or root.
+Mocks container/registry commands and uses real 7z packaging, exercising
 real resolution, file naming, checksums, failure propagation, and workflow shell
 syntax. Does not establish image-builder, Anaconda, or VM integration success.
 """
@@ -43,6 +43,15 @@ for value in ("", "d" * 12, "d" * 63, "d" * 65, "g" * 64,
         raise AssertionError(f"Invalid image ID accepted: {value!r}")
 image = "ghcr.io/controlthings-io/controlthingsplatform"
 builder = "ghcr.io/osbuild/image-builder@sha256:" + "c" * 64
+assert disk.workflow_suffix({}) == ""
+assert disk.workflow_suffix({'workflow_run': '123', 'workflow_attempt': '2'}) == '-123-2'
+for run_id, attempt in (('123/path', '1'), ('123', '2\n'), ('123', '-1')):
+    try:
+        disk.workflow_suffix({'workflow_run': run_id, 'workflow_attempt': attempt})
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('Invalid artifact suffix accepted')
 info = {
     "Architecture": "amd64", "Os": "linux", "Created": "2026-10-15T19:22:11Z",
     # Actual project course builds may inherit the latest prefix. Only date/hash
@@ -122,6 +131,8 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                 continue
             for channel in ("latest", "ics410_l01", "ics410-l01"):
                 metadata = resolve(channel, architecture=architecture)
+                if kind == "qcow2":
+                    metadata.update(workflow_run="12345", workflow_attempt="2")
                 output = Path(temporary) / f"{kind}-{channel}-{architecture}"
                 commands = []
 
@@ -160,6 +171,8 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                 name = f"controlthingsplatform-{channel}-20261015-5118339-{architecture}"
                 if kind == "iso":
                     name += "-installer"
+                elif kind == "qcow2":
+                    name += "-12345-2"
                 artifact = output / f"{name}.{kind}"
                 assert artifact.exists()
                 assert artifact.with_suffix(artifact.suffix + ".sha256").read_text() == (
@@ -171,6 +184,7 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                 assert not any(cmd[:2] == ("qemu-img", "convert") for cmd in commands)
                 if kind == "vmdk":
                     assert saved["vmdk_subformat"] == "monolithicSparse"
+                    assert saved["bundle_filename"].endswith(".7z")
                     assert (output / saved["bundle_filename"]).is_file()
                     assert not list(output.glob(".bundle-*"))
                 else:
@@ -339,14 +353,24 @@ assert "build disk-input/prepared.json" in assembly["run"]
 
 uploads = [step for step in workflow['jobs']['build']['steps']
            if step.get('uses', '').startswith('actions/upload-artifact@')]
-assert len(uploads) == 3
-bundle_upload = next(step for step in uploads if step['with'].get('archive') is False)
+assert len(uploads) == 4
+bundle_upload = next(step for step in uploads if step['with']['path'] == 'output/*.7z')
+assert bundle_upload['with']['archive'] is False
 assert bundle_upload['if'] == "matrix.format == 'vmdk'"
-assert bundle_upload['with']['path'] == 'output/*.zip'
+qcow_upload = next(step for step in uploads if step['with']['path'] == 'output/*.qcow2')
+assert qcow_upload['if'] == "matrix.format == 'qcow2'"
+assert qcow_upload['with']['archive'] is False
 metadata_upload = next(step for step in uploads if 'metadata-' in step['with'].get('name', ''))
 assert metadata_upload['with']['path'].splitlines() == ['output/*.json', 'output/*.sha256']
-assert metadata_upload['if'] == "matrix.format == 'vmdk'"
-assert uploads[0]['if'] == "matrix.format != 'vmdk'"
+assert metadata_upload['if'] == "matrix.format != 'iso'"
+assert '${{ matrix.format }}-metadata-' in metadata_upload['with']['name']
+assert metadata_upload['with'].get('archive', True) is True
+assert uploads[0]['if'] == "matrix.format == 'iso'"
+assert uploads[0]['with']['path'] == 'output/'
+assert uploads[0]['with']['compression-level'] == 0
+build_tools = next(step for step in workflow['jobs']['build']['steps']
+                   if step['name'] == 'Install disk build tools')
+assert '7zip' in build_tools['run']
 
 # Exercise S3 filters without installation or network access.
 s3 = next(step for step in workflow['jobs']['build']['steps'] if step['name'] == 'Upload to S3')
@@ -365,7 +389,7 @@ with tempfile.TemporaryDirectory(prefix='ct-upload-') as temporary:
         subprocess.run(['bash', '-e', '-c', s3['run']], env=env, check=True)
         args = capture.read_text().splitlines()
         assert args[:3] == ['copy', 'output/', f'S3:fixture/latest-20261020-abcdef0/123-2/amd64/{kind}/']
-        assert args[3:] == (['--include', '*.zip', '--include', '*.json', '--include', '*.sha256']
+        assert args[3:] == (['--include', '*.7z', '--include', '*.json', '--include', '*.sha256']
                             if kind == 'vmdk' else [])
 
 for job in workflow["jobs"].values():

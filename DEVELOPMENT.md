@@ -492,22 +492,31 @@ container into ARM64. The container workflow currently builds AMD64 only, and
 the inspected `latest` tag has no ARM64 payload. Publish an ARM64 source before
 using that platform; the resolver fails early when it is missing.
 
-VMDK downloads are compressed ZIP64 bundles. Latest-channel bundles (including
+VMDK downloads are compressed `.7z` bundles. Latest-channel bundles (including
 builds from dated `latest` tags) contain only the versioned VMDK,
 `controlthingsplatform.vmx`, and `controlthingsplatform.vbox`. Branch bundles
-contain only the VMDK and VMX. GitHub uploads the prebuilt ZIP directly without
-another archive wrapper; a separate `vmdk-metadata` artifact holds the disk and
-ZIP `.sha256` files, `.source.json`, and executed OSBuild manifest. Optional S3
-uploads place that same ZIP and the metadata/checksum files alongside each other;
-the unpacked VMDK is not uploaded separately. ISO/QCOW2 downloads retain their
-existing image-plus-metadata layout.
+contain only the VMDK and VMX. GitHub uploads the prebuilt `.7z` directly;
+a separate `vmdk-metadata` ZIP artifact holds the disk and bundle `.sha256` files,
+`.source.json`, and executed OSBuild manifest. Optional S3 uploads place that same
+`.7z` and the metadata/checksum files alongside each other; the unpacked VMDK is
+not uploaded separately.
 
-After placing a checksum file beside its corresponding ZIP or extracted disk,
-verify it with `sha256sum -c FILENAME.sha256`. Metadata records the original OS
-digest, disk-only payload image ID, tool versions, requested tag, update reference,
-builder, and workflow run. Same-day container rebuilds can reuse date/hash tags;
-the recorded identities distinguish their contents. CI bundle names also contain
-the workflow run and attempt so repeated runs remain separate.
+QCOW2 is also a direct GitHub download, without a ZIP wrapper or an additional
+compression step. Its `.sha256`, `.source.json` and build manifest are in a
+separate `qcow2-metadata` ZIP artifact. CI-generated QCOW2 filenames append the
+workflow run and attempt before `.qcow2` so direct uploads remain distinct across
+runs and retries; local builds keep the date/hash filename above. S3 continues
+to receive the QCOW2 and individual metadata/checksum files. ISO packaging is
+unchanged: GitHub provides the image and metadata together in an uncompressed
+ZIP, while S3 receives the individual files.
+
+Extract VMDK bundles with a 7z-capable tool, for example `7zz x FILENAME.7z`.
+After placing a checksum file beside its corresponding `.7z`, QCOW2 or extracted
+disk, verify it with `sha256sum -c FILENAME.sha256`. Metadata records the original
+OS digest, disk-only payload image ID, tool versions, requested tag, update
+reference, builder, and workflow run. Same-day container rebuilds can reuse
+date/hash tags; the recorded identities distinguish their contents. CI VMDK
+bundle names contain the workflow run and attempt so repeated runs remain separate.
 
 Installed systems follow their source channel: `latest` updates to `latest`,
 `ics410_l01` updates to `ics410_l01`, and `ics410-l01` updates to `ics410-l01`.
@@ -554,18 +563,25 @@ descriptor before checksumming. This is distinct from VMware's UUID and filesyst
 UUIDs. Both templates default to two vCPUs; VMware presents one socket/two cores.
 All other template settings and line endings are preserved.
 
-The bundle uses Deflate level 6 and ZIP64 for large disks. Compression reduces
-download size; the extracted writable disk remains larger than streamOptimized.
-Allow space for OSBuild's raw disk/cache and output, then the output plus ZIP during
-packaging. Temporary ZIPs are removed on packaging failure. Disk and ZIP checksums
-and source metadata are emitted after successful packaging; `artifact_bytes`
-describes the disk, while `bundle_filename`/`bundle_bytes` describe the download.
-Local output retains the unpacked VMDK for inspection.
+VMDK packaging requires host `7zz` (`7zip` on Ubuntu 24.04). Bundles use 7z/LZMA2
+level 5, a 32 MiB dictionary, and two compression threads. Solid mode is disabled
+so extracting a small VM configuration does not require decompressing the disk.
+These explicit settings limit resource costs across 7-Zip versions; full-size
+compression time, memory and download size still need measurement.
+
+Compression reduces download size; the extracted writable disk remains larger
+than streamOptimized. Allow space for OSBuild's raw disk/cache and output, then
+the output plus `.7z` during packaging. A temporary hard-link stages the source
+disk without another copy. Partial archives and temporary files are removed on
+packaging failure. Disk and bundle checksums and source metadata are emitted
+after successful packaging; `artifact_bytes` describes the disk, while
+`bundle_filename`/`bundle_bytes` describe the download. Local output retains the
+unpacked VMDK for inspection.
 
 Run `python3 tests/check_build_disk.py`, `python3 tests/check_disk_payload_reuse.py`,
 `python3 tests/check_vmdk.py`, and `python3 tests/check_osbuild_runner.py` for relevant
-checks. The real small-disk test needs `qemu-img` and `qemu-io` and uses the local
-OSBuild QEMU stage when installed. Mocked container/registry checks do not establish
+checks. The VMDK checks need `7zz`; the real small-disk test also needs `qemu-img` and
+`qemu-io` and uses the local OSBuild QEMU stage when installed. Mocked container/registry checks do not establish
 full image or guest boot success; see [current validation](docs/STATUS.md).
 
 The local legacy disk configuration also uses a 64 GiB root minimum.

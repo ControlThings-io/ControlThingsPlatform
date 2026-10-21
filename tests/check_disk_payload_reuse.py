@@ -1,6 +1,7 @@
 """Exercise retained payload identity/reuse without downloads, root or installers.
 
-Run with python3. Registry/Podman are command fixtures. This verifies failure
+Run with python3; requires 7zz for real VMDK packaging. Registry/Podman are command
+fixtures. This verifies failure
 boundaries and preparation/assembly separation, not registry access permissions
 or a real bootc import. The small real OCI transport check lives separately.
 """
@@ -162,7 +163,7 @@ with tempfile.TemporaryDirectory(prefix='ct-payload-reuse-') as temporary:
                 prepare.assert_not_called()
             assert not list(failed_output.glob('*.sha256'))
             assert not list(failed_output.glob('*.source.json'))
-            assert not list(failed_output.glob('*.zip'))
+            assert not list(failed_output.glob('*.7z'))
             assert not list(failed_output.glob('.bundle-*'))
 
     # Verify config identity before tagging/running a pulled payload.

@@ -1,7 +1,7 @@
 """Check direct VMDK output, media UUIDs and compressed VM bundles.
 
-Run from the repository root with python3 tests/check_vmdk.py. Requires qemu-img
-and qemu-io. Uses a real local OSBuild QEMU stage when installed, otherwise QEMU
+Run from the repository root with python3 tests/check_vmdk.py. Requires qemu-img,
+qemu-io and 7zz. Uses a real local OSBuild QEMU stage when installed, otherwise QEMU
 with its documented stage arguments. This is small-disk validation, not OSBuild
 container integration or VMware/VirtualBox boot validation.
 """
@@ -19,7 +19,6 @@ import tempfile
 from unittest.mock import patch
 import uuid
 import xml.etree.ElementTree as ET
-import zipfile
 
 sys.dont_write_bytecode = True
 
@@ -125,20 +124,22 @@ with tempfile.TemporaryDirectory(prefix='ct-vmdk-') as temporary:
     for channel in ('latest', 'latest', 'ics410_l01', 'ics410-l01'):
         metadata = {'source_tag': f'{channel}-20261020-abcdef0',
                     'workflow_run': '12345', 'workflow_attempt': str(len(machine_ids) + 1)}
-        # Force ZIP64 on a small fixture to exercise the large-disk archive path.
-        with patch.object(zipfile, "ZIP64_LIMIT", 1024):
-            bundle = disk.package_vmdk(artifact, metadata)
-        assert bundle.name.endswith(f'-vmdk-12345-{metadata["workflow_attempt"]}.zip')
-        with zipfile.ZipFile(bundle) as archive:
+        bundle = disk.package_vmdk(artifact, metadata)
+        assert bundle.name.endswith(f'-vmdk-12345-{metadata["workflow_attempt"]}.7z')
+        subprocess.run(['7zz', 't', str(bundle)], check=True, stdout=subprocess.DEVNULL)
+        details = subprocess.check_output(['7zz', 'l', '-slt', str(bundle)], text=True)
+        assert 'Type = 7z' in details and 'Method = LZMA2' in details
+        assert 'Solid = -' in details
+        with tempfile.TemporaryDirectory(dir=root) as extracted:
+            subprocess.run(['7zz', 'x', str(bundle), f'-o{extracted}'],
+                           check=True, stdout=subprocess.DEVNULL)
+            members = Path(extracted)
             expected = {artifact.name, 'controlthingsplatform.vmx'}
             if channel == 'latest':
                 expected.add('controlthingsplatform.vbox')
-            assert set(archive.namelist()) == expected
-            assert archive.testzip() is None
-            assert archive.getinfo(artifact.name).extract_version >= 45
-            assert all(entry.compress_type == zipfile.ZIP_DEFLATED for entry in archive.infolist())
-            assert archive.read(artifact.name) == artifact.read_bytes()
-            vmx = archive.read('controlthingsplatform.vmx').decode()
+            assert {p.name for p in members.iterdir()} == expected
+            assert (members / artifact.name).read_bytes() == artifact.read_bytes()
+            vmx = (members / 'controlthingsplatform.vmx').read_bytes().decode()
             display = ('ControlThings Platform' if channel == 'latest' else
                        f'{channel.upper()} - ControlThings Platform')
             assert f'displayName = "{display}"' in vmx
@@ -150,7 +151,7 @@ with tempfile.TemporaryDirectory(prefix='ct-vmdk-') as temporary:
                                                f'displayName = "{display}"').replace(
                 'nvme0:0.fileName = "controlthingsplatform.vmdk"', f'nvme0:0.fileName = "{artifact.name}"')
             if channel == 'latest':
-                vbox_bytes = archive.read('controlthingsplatform.vbox')
+                vbox_bytes = (members / 'controlthingsplatform.vbox').read_bytes()
                 vbox = ET.fromstring(vbox_bytes)
                 machine = vbox.find('v:Machine', ns)
                 machine_id = machine.get('uuid')
@@ -175,15 +176,23 @@ with tempfile.TemporaryDirectory(prefix='ct-vmdk-') as temporary:
             assert path.with_name(path.name + '.sha256').read_text() == (
                 hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + path.name + '\n')
         bundle.unlink()
-    # A failed archive write leaves no publishable ZIP or temporary directories.
-    with patch.object(zipfile.ZipFile, 'write', side_effect=OSError('disk full')):
-        try:
-            disk.package_vmdk(artifact, {'source_tag': 'latest'})
-        except OSError:
-            pass
-        else:
-            raise AssertionError('Ignored packaging failure')
-    assert not list(root.glob('*.zip')) and not list(root.glob('.bundle-*'))
+    # Missing tools and compression failures must leave no publishable archive,
+    # temporary directory or staged hard-link; the source disk remains intact.
+    for error in (FileNotFoundError('7zz'), subprocess.CalledProcessError(2, ['7zz'])):
+        def failed_compression(args, **kwargs):
+            Path(args[args.index('--') - 1]).write_bytes(b'partial archive')
+            raise error
+
+        with patch.object(disk.subprocess, 'run', side_effect=failed_compression):
+            try:
+                disk.package_vmdk(artifact, {'source_tag': 'latest'})
+            except (FileNotFoundError, subprocess.CalledProcessError):
+                pass
+            else:
+                raise AssertionError('Ignored packaging failure')
+        assert not list(root.glob('*.7z')) and not list(root.glob('.bundle-*'))
+        assert artifact.read_bytes() == after_uuid
+        assert artifact.stat().st_nlink == 1
 
     # Descriptor validation rejects malformed bounds/data without changing bytes.
     for mode in ('magic', 'bounds', 'padding', 'duplicate', 'invalid-uuid', 'full'):
