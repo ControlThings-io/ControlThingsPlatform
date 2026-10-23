@@ -1,0 +1,6 @@
+# Persistent environments must not depend on a disposable package cache.
+link-mode = "copy"
+python-preference = "only-managed"
+# URH's sdist omits these build requirements; needed when no native wheel exists.
+[extra-build-dependencies]
+urh = ["cython", "numpy<3.0"]

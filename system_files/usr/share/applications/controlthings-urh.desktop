@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Universal Radio Hacker
+Comment=Investigate wireless protocols
+Exec=urh %F
+TryExec=/var/lib/uv-tools/bin/urh
+Icon=utilities-terminal
+Terminal=false
+Categories=Science;Electronics;

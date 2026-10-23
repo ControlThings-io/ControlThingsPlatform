@@ -8,6 +8,39 @@ and `DECISIONS.md`, not these shared files.
 
 ## Current work
 
+- Implemented shared uv tools on 2026-10-22 against main `48f093b`: ctmodbus,
+  ctserial, greatfet, rfcat and urh, with managed Python 3.13. The final selection
+  supersedes the earlier ctmodbus/ctserial exclusions; ctui is a required dependency,
+  not a standalone selection. The common manual installer and disk preparation
+  use the same manifest/helper. Stores live under `/var/lib/uv-tools`, owned by
+  the reserved non-login UID/GID 395; normal OS builds create only empty stores
+  and integration files. Wheel administrators receive fixed install/update
+  permissions; package builds run without root or supplementary groups. Bash/fish
+  permit personal overrides. URH has a desktop entry; GreatFET/RfCat USB rules ship
+  with the OS. See [implementation](../DEVELOPMENT.md#shared-python-tools-with-uv)
+  and [decisions](DECISIONS.md#shared-python-tools--2026-10-22).
+  Manual `ujust update`/`upgrade` delegates to Aurora before shared/personal uv
+  updates. A top-level recipe avoids Just's imported-recipe precedence issue.
+  Automatic shared updates use the existing uupd services and timer/toggle
+  behavior, with no independent timer or uv-only enabled-state gate. Existing
+  tools are preserved on install reruns and manifest removal; updates never add
+  missing selections. Disk metadata records runtime and dependency versions.
+  Passed policy/manual-installer/payload/disk-orchestration/reuse regressions,
+  actual Just recipe/alias/failure-boundary execution, Bash/fish syntax, sudoers,
+  udev/desktop validation and systemd unit verification. Private namespace checks
+  exercised real sysusers, privilege dropping, account collisions, normal-user
+  access, unsafe permissions, additive reruns and failed-install recovery.
+  Real isolated AMD64 installation/update/inventory passed with uv 0.12.24,
+  CPython 3.13.16, ctmodbus 0.6.0, ctserial 0.5.0, greatfet 2026.0.0, rfcat 2.0.1
+  and urh 2.10.0. All five passed offline startup as a normal user; URH used Qt
+  offscreen mode and the ControlThings TUIs used a dummy terminal with automatic
+  exit. URH's isolated source build also passed locally. These tests did not
+  modify host installations/accounts or run real hardware operations.
+  Remaining: fresh full image/payload build, guest login/PATH/desktop behavior,
+  sudo authorization, SELinux labels, automatic service execution/toggle/retry,
+  multiple real users, OS-update persistence, ARM64 builds and physical device/SDR
+  backend coverage. No new image build, publication or remote CI was performed.
+
 - README policy clarified on 2026-10-20: repository instructions now require
   explicit approval for any README edit, with suggestions only until approved.
   Its scope is marketing and user help. The unapproved wallpaper addition was
@@ -293,6 +326,8 @@ proposals, not accepted fixes or measured savings.
    previously downloaded ISO test independently.
 4. Validate user background persistence and real capture hardware. Publish an ARM64
    source before attempting ARM64 disks; migrate legacy local disk recipes separately.
-5. Keep per-user uv provisioning deferred. Managed classroom accounts/home content,
+5. Validate the shared Python implementation in a fresh AMD64 guest through manual
+   and disk provisioning, automatic updates/toggle, personal overrides and physical
+   devices; then validate ARM64. Managed classroom accounts/home content,
    a complete Aurora fork/installer migration, and reproducibility optimizations
    remain proposals. Do not infer release readiness from smoke checks.

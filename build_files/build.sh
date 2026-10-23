@@ -16,9 +16,12 @@ cp -avf "/ctx/system_files"/. /
 PACKAGES=(
     fish
     firefox
+    gcc-c++
     incus
     incus-agent
     lxc
+    libusb1
+    libgomp
     markdownpart
     netcat
     python3
@@ -77,6 +80,29 @@ systemctl enable podman.socket
 chmod 0755 /usr/libexec/controlthings-groups
 systemctl enable controlthings-groups.service
 chmod 0755 /usr/libexec/controlthings-tools
+chmod 0755 /usr/libexec/uv-tools
+chmod 0440 /etc/sudoers.d/uv-tools
+visudo -cf /etc/sudoers.d/uv-tools
+# Reserve a stable service identity; this creates empty stores, not applications.
+/usr/libexec/uv-tools setup
+# Refuse an upstream updater layout change instead of silently losing integration.
+test -f /usr/share/ublue-os/just/update.just
+test -f /usr/lib/systemd/system/uupd.service
+test -f /usr/lib/systemd/system/uupd-manual.service
+# Just's earlier import wins over later imports at the same depth. Put this
+# override in the entry file itself so import ordering cannot hide the uv step.
+python3 - <<'PY'
+from pathlib import Path
+entry = Path('/usr/share/ublue-os/just/00-entry.just')
+fragment = Path('/usr/share/ublue-os/just/uv-update.just').read_text()
+contents = entry.read_text()
+if fragment not in contents:
+    if '# ControlThings shared Python update integration' in contents:
+        raise SystemExit('Unexpected pre-existing uv update integration')
+    entry.write_text(contents.rstrip() + '\n' + fragment)
+PY
+just --justfile /usr/share/ublue-os/just/00-entry.just --show update | \
+    grep -F '/usr/libexec/uv-tools user-update'
 
 # Remove inherited counting cookies after package operations, before rechunking.
 # Tiny changes here otherwise invalidate the large unpackaged-content layer.

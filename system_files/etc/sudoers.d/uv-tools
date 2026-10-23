@@ -1,0 +1,2 @@
+# Fixed operations only: no package, directory, environment or shell arguments.
+%wheel ALL=(root) NOPASSWD: /usr/libexec/uv-tools install, /usr/libexec/uv-tools update

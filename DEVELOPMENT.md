@@ -317,7 +317,8 @@ the selected container, not the workflow checkout. Prepare a fresh payload for
 this expanded bundle; an older retained payload still contains its original apps.
 Full-size capacity and offline application launches need validation, starting
 with AMD64 QCOW2. The successful payload can then be reused for ISO assembly.
-Per-user Python tool provisioning remains deferred.
+Shared Python tools join this same disk-only preparation path; see
+[shared uv tools](#shared-python-tools-with-uv) below.
 
 The [ControlThings Brewfile](system_files/usr/share/ublue-os/homebrew/controlthings.Brewfile)
 defines the apps prepared **only during manual disk-image builds**. Normal
@@ -329,7 +330,7 @@ including Bazaar. Aurora's `system-flatpaks.Brewfile` remains excluded, as do
 its optional CLI, fonts and DX bundles. Firefox is installed as an RPM in the
 OS image and opens the bundled CyberChef application.
 
-The Brewfile is the source of truth for selected apps. It includes CLI tools
+The Brewfile is the source of truth for selected Brew/Flatpak apps. It includes CLI tools
 such as `eza`, `gping`, `git-delta` (the `delta` command), `libbladerf`, and
 `librtlsdr`, plus GUI tools such as Gqrx, Obsidian, ImHex, Okteta, and Bazaar.
 ZAP is AMD64-only because Flathub has no ARM64 build. Use simple `brew "name"` and `flatpak "application.ID"`
@@ -372,7 +373,8 @@ ujust install-controlthings-tools
 
 This installs missing Homebrew formulae without upgrading existing ones, then
 installs missing system Flatpaks using Aurora’s native Flatpak authorization,
-without wrapping the helper in `pkexec`. ZAP’s X11 override applies to the invoking
+without wrapping the helper in `pkexec`, followed by the restricted shared uv
+installer. ZAP’s X11 override applies to the invoking
 user; disk preparation retains its system-wide override. It can
 download missing packages and does not remove other tools. Continue using
 Homebrew, Flatpak, or Aurora's update tooling for application updates. Installing
@@ -392,6 +394,94 @@ Gqrx's former preinstall declaration was removed with the user's approval.
 The unpublished development image that previously tracked it may remove it once
 during preinstall reconciliation; reinstall with the command above afterward.
 See [current validation](docs/STATUS.md) and [accepted decisions](docs/DECISIONS.md).
+
+## Shared Python tools with uv
+
+The [Python manifest](system_files/usr/share/controlthings/uv-tools.json) selects
+ctmodbus, ctserial, greatfet, rfcat and urh. Each gets an isolated uv tool environment
+and exported commands. ctui is required inside the ctmodbus/ctserial environments;
+it is not selected as a standalone tool. Python 3.13 is requested by minor version,
+allowing managed patch updates. Application requirements are unpinned; dependency
+constraints supplied by the applications still apply. uv itself is an OS RPM.
+
+Normal OS builds install the management files, native prerequisites, URH desktop
+entry, USB access rules and empty shared directories. They do not download Python
+runtimes or applications. Disk preparation invokes the selected image's
+[`uv-tools` helper](system_files/usr/libexec/uv-tools), captures its inventory under
+the `uv` field of `/var/lib/controlthings/tools/installed.json`, and copies the
+prepared store at its final absolute path into the retained disk payload. Publish
+the new OS image and prepare a fresh payload before building populated disks.
+
+| Directory | Purpose | Owner |
+| --- | --- | --- |
+| `/var/lib/uv-tools` | Protected parent | root |
+| `/var/lib/uv-tools/python` | Managed Python runtimes | uv-tools |
+| `/var/lib/uv-tools/tools` | Per-application environments | uv-tools |
+| `/var/lib/uv-tools/bin` | Exported application commands | uv-tools |
+| `/var/lib/uv-tools/home` | Private maintenance home | uv-tools |
+| `/var/cache/uv-tools` | Disposable build/download cache | uv-tools |
+
+The locked, non-login `uv-tools` account reserves UID/GID 395 across images.
+Account collisions or unexpected shared-directory permissions fail with a diagnostic;
+the helper never takes over another account or recursively changes existing ownership.
+Ordinary users can read/execute installed tools. Package installation/builds run as
+`uv-tools`, without supplementary groups; applications run as their invoking user.
+The parent, helper, configuration and manifest remain root-owned. The cache is
+discarded with the disk preparation stage; environments use copy linking and retain
+their managed interpreter, so neither cache nor network is required at first boot.
+
+`ujust install-controlthings-tools` uses a narrowly scoped passwordless sudo rule
+for `wheel` administrators to run the fixed shared install action. The existing
+Brew-owner restriction still applies to that combined command. Arbitrary package
+names, paths and environment overrides are not accepted by the privileged helper.
+Reruns install missing selections and validate their commands/dependencies, preserving
+existing versions. Removing an entry from the manifest does not uninstall it.
+
+`ujust update` delegates to Aurora's shipped update recipe, then updates shared and
+invoking-user Python runtimes/tools. The build appends the small
+[`uv-update.just` fragment](system_files/usr/share/ublue-os/just/uv-update.just) to
+Aurora's entry file so its recipe takes precedence over imported recipes; the
+original `update.just` stays intact. `ujust upgrade` uses the same override.
+It preserves upstream failure/active-update
+guards: if Aurora's step fails, the Python step is not reached. Within the Python
+step, a shared failure still permits personal attempts and the final result fails.
+Automatic shared updates use `ExecStartPost` drop-ins for `uupd.service` and
+`uupd-manual.service`, with no independent timer or uv-only toggle check. An upstream
+failure, including failed enabled hardware checks, skips the post-step; a uv failure
+fails the service and uses its existing retry policy. Automatic updates never create
+missing applications. Personal tools are updated only by that user's manual action.
+`ujust toggle-updates` retains Aurora's scheduling semantics, including its existing
+enable/disable behavior without `--now`. One root-owned lock serializes shared actions.
+
+Bash and fish place `~/.local/bin` before `/var/lib/uv-tools/bin`; no shared `UV_*`
+variables are exported to user sessions. Ordinary `uv tool install NAME` creates a
+personal override. A fresh shell may be needed after upgrading an existing system.
+`uv tool list`/`uvx` use the personal store rather than combining both stores. For
+current shared dependency/runtime details, an administrator can run
+`sudo /usr/libexec/uv-tools inventory`; the disk's `installed.json` remains an initial
+provisioning snapshot. OS rollback does not roll back these mutable applications.
+
+URH's wheel supplies Qt and compiled extensions on AMD64. The
+[uv configuration](system_files/usr/share/controlthings/uv.toml) supplies Cython and
+NumPy to URH's isolated source build where no wheel exists; `gcc-c++` and `libgomp`
+are available for native builds/updates. `libusb1` supports GreatFET/RfCat. Device
+rules grant GreatFET/RfCat access to active local sessions; RfCat also supports
+`dialout`. Serial-group setup remains Aurora's `ujust dx-group` responsibility.
+RFcat's optional legacy PySide2 spectrum-analyzer extra is not selected. Additional
+URH SDR backends can require their native libraries/development packages; the shared
+rfcat environment is not automatically importable from URH's isolated environment.
+Hardware access, SDR backend coverage and native ARM64 operation need guest testing.
+
+Run `python3 tests/check_uv_tools.py`, `python3 tests/check_controlthings_tools.py`
+and `python3 tests/check_tools_payload_build.py` for policy/orchestration checks.
+`unshare --user --map-auto --map-root-user python3 tests/check_uv_tools_sandbox.py`
+uses real sysusers and privilege dropping in a private filesystem, with fake package
+commands. It needs configured subordinate UID/GID mappings (sudo is an alternative).
+Add `--live` to download real packages into the temporary shared store and check
+installation, additive reruns, upgrades, inventory and offline normal-user startup;
+this does not alter host accounts/packages. GUI smoke uses Qt's offscreen backend,
+and TUI smoke automatically exits with a dummy terminal. Full image, desktop,
+automatic-service and physical-device checks remain separate.
 
 ## Containerfile
 

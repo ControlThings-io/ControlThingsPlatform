@@ -28,7 +28,104 @@ system, CLI, DX, or font bundles. Keep its inherited Homebrew bootstrap.
 This supersedes the earlier default-Flatpak merge and temporary smoke selection.
 The full custom list is enabled; ettercap remains removed and ZAP is AMD64-only.
 Custom-only payloads use `profile=controlthings`; retained smoke payloads keep
-their original profile and filename. Per-user uv provisioning remains deferred.
+their original profile and filename. Python provisioning follows the accepted
+[shared-tool direction](#shared-python-tools--2026-10-22) below.
+
+## Shared Python tools — 2026-10-22
+
+Accepted: use shared preinstalled Python CLI tools with uv-managed Python runtimes,
+and a separate Python manifest dispatched by the existing
+`ujust install-controlthings-tools` command. Allow personal installations to
+override shared commands. Integrate uv tool updates into the normal ujust update
+flow alongside Brew and Flatpak. Automatic uv updates must honor the existing
+`ujust toggle-updates` setting; deliberate manual updates remain available when
+automatic updates are disabled. The user's final selection is ctmodbus, ctserial,
+greatfet, rfcat and urh, superseding the earlier ctmodbus/ctserial exclusions.
+ctui remains unselected as a standalone tool but is a required dependency of both
+ControlThings applications; it is installed inside their isolated environments.
+This supersedes the deferred per-user-only provisioning direction. Installation
+adds missing tools; the update action upgrades installed tools. The application
+list is in the shared [Python manifest](../system_files/usr/share/controlthings/uv-tools.json).
+
+Accepted layout: `/var/lib/uv-tools/{python,tools,bin}` for managed runtimes,
+isolated tool environments and exported commands. These are platform choices,
+not uv-prescribed system directories. uv documents configurable
+[`UV_PYTHON_INSTALL_DIR`, `UV_TOOL_DIR`, and `UV_TOOL_BIN_DIR`](https://docs.astral.sh/uv/reference/storage/).
+Set shared-directory variables only within shared management commands; leave
+ordinary user uv commands on their personal defaults. Put the user's executable
+directory ahead of the shared bin directory in supported shells. Direct commands
+then use personal overrides; ordinary `uv tool list`/`uvx` do not merge stores.
+Accepted ownership: a dedicated locked, non-login `uv-tools` system account owns
+the shared runtime/tool/bin directories and its private cache. Keep the parent,
+manifest and management code root-owned; installed content is readable/executable
+as appropriate by ordinary users, but writable only by the service account/root.
+Reserve UID/GID 395 across build, installation and OS updates. Reject collisions
+before sysusers creation; do not borrow UID 1000 or recursively change ownership.
+Application execution runs as its caller, not as `uv-tools`. The accepted account
+name and path replace the earlier `ct-tools` and `/var/lib/controlthings/uv`
+proposals; no installed stores exist to migrate.
+
+Accepted authorization: local administrators in `wheel` may invoke fixed shared
+install/update actions without an additional password prompt. Use a narrowly
+authorized root-owned helper or systemd service that runs uv as `uv-tools`, with
+fixed paths, a controlled environment/configuration and no caller-selected package,
+path or shell arguments. This permission does not grant an arbitrary shell as the
+service account. Other users may execute shared tools and manage their own tools.
+The existing Brew-owner restriction is separate. Update shared tools and the
+invoking user's tools separately, without traversing other users' homes. Serialize
+shared installation and both update entry points with the same lock.
+
+Accepted scheduling direction: mimic Brew/Flatpak within the existing automatic
+update cycle, without an independent uv schedule or uv-only timer-enabled check.
+This supersedes the proposed explicit timer-state gate. Inspection of upstream
+[update orchestration](https://github.com/ublue-os/uupd/blob/main/cmd/update.go),
+[Brew](https://github.com/ublue-os/uupd/blob/main/drv/brew/brew.go) and
+[Flatpak](https://github.com/ublue-os/uupd/blob/main/drv/flatpak/flatpak.go) code on
+2026-10-22 found no timer-state checks. uupd uses its module-disable configuration
+and optional hardware checks; these are distinct from `toggle-updates`, which
+changes timer enablement in the inspected Aurora recipe. That recipe uses
+`systemctl enable`/`disable` without `--now`, so stopping an active timer immediately
+is not an established upstream guarantee. Preserve upstream scheduling semantics
+rather than adding a separate uv interpretation. Manual updates remain available.
+
+Implemented integration: uupd has no uv module or documented custom-script
+extension, so use `ExecStartPost` on its automatic and manual services. Upstream
+failure (including failed enabled hardware checks) skips Python maintenance; a
+Python failure fails the service and participates in upstream retries. This avoids
+running after a failed prerequisite and preserves upstream service configuration.
+The manual ujust override delegates to Aurora's original recipe before invoking
+Python updates, likewise stopping on an upstream failure. Append the override to
+`00-entry.just`: top-level recipes take precedence over imported definitions,
+whereas the existing later `60-custom.just` import cannot override Aurora's earlier
+update import. Preserve the original update recipe and its upgrade alias. Automatic shared updates
+run as `uv-tools`; personal tools are updated
+as the invoking user on the manual path. Any future personal automatic updater must
+honor the same toggle and must not run user package operations as root. See
+[uupd's supported scope](https://github.com/ublue-os/uupd/blob/main/README.md#faq).
+
+Accepted runtime policy: require managed CPython, select compatible minor versions,
+and include patch updates through `uv python upgrade` as well as
+`uv tool upgrade --all`. Avoid permanent exact application-version constraints
+unless intentional, since uv upgrades honor them. Python minor-version migration
+needs explicit compatibility validation; patch-following environments must use
+uv's supported minor-version indirection. See
+[uv's runtime upgrade contract](https://docs.astral.sh/uv/concepts/python-versions/#upgrading-python-versions).
+Implementation selects 3.13, verified against all five selected releases. URH has
+AMD64 wheels for that series; its source-build fallback needs extra isolated build
+dependencies (Cython/NumPy) and a C++ compiler. This does not establish ARM64 or
+physical SDR support. Keep ctui's transitive requirement in the ControlThings
+environments; do not add a shared Python site-packages directory.
+
+Accepted delivery mechanism: disk-only preparation. Normal OS images
+ship uv, the manifest, helper and shell/update integration; retained disk payloads
+add populated shared stores under `/var` at their final absolute paths. Disk
+installation initializes those stores; OS updates preserve them. Existing systems
+use the manual installer, and application updates use the update action. Extend
+retained-payload provenance with Python runtime/tool identities; metadata describes
+initial provisioning, not subsequent updates. Cache contents are not retained.
+GreatFET/RfCat USB access rules and the URH desktop entry ship with the OS; running
+applications retain the caller's privileges. See [development details](../DEVELOPMENT.md#shared-python-tools-with-uv)
+and [status](STATUS.md) for evidence and remaining work.
 
 ## Bundled Homebrew and Flatpak tools — 2026-10-15
 

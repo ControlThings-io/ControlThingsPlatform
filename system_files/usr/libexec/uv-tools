@@ -1,0 +1,249 @@
+#!/usr/bin/python3 -I
+"""Manage shared Python tools without granting callers a general package shell.
+
+Root-only setup/install/update/inventory use immutable manifests and a sanitized
+environment, executing uv and all package builds as the locked uv-tools account.
+Only install/update are exposed through sudoers. A root-owned lock serializes all
+shared operations. Installation adds missing packages; update changes installed
+ones, including tools later removed from the manifest. Neither removes tools.
+An empty store makes update a no-op, so OS upgrades never provision applications.
+
+user-update runs as a login user: authorized shared maintenance followed by that
+user's Python/tool upgrades. It never visits another user's home. Failures return
+nonzero; successful earlier package operations remain installed and can be retried.
+inventory emits current JSON, separately from the disk's initial installed.json.
+"""
+
+import argparse
+import fcntl
+import grp
+import hashlib
+import json
+import os
+from pathlib import Path
+import pwd
+import re
+import stat
+import subprocess
+import sys
+from typing import Any
+
+BASE = Path('/var/lib/uv-tools')
+CACHE = Path('/var/cache/uv-tools')
+MANIFEST = Path('/usr/share/controlthings/uv-tools.json')
+CONFIG = Path('/usr/share/controlthings/uv.toml')
+SYSUSERS = '/usr/lib/sysusers.d/uv-tools.conf'
+LOCK = Path('/run/lock/uv-tools.lock')
+HELPER = '/usr/libexec/uv-tools'
+UV = '/usr/bin/uv'
+ACCOUNT = 'uv-tools'
+IDENTITY = 395
+
+
+def read_manifest() -> dict[str, Any]:
+    """Validate the fixed package list and expected commands before any mutation.
+
+Package names are normalized PyPI names, not URLs or arbitrary requirements.
+Python is pinned to a minor series so managed patch upgrades remain available.
+"""
+    data = json.loads(MANIFEST.read_text())
+    if (set(data) != {'schema', 'python', 'tools'} or data['schema'] != 1
+            or not isinstance(data['python'], str)
+            or not re.fullmatch(r'3\.[0-9]+', data['python'])
+            or not isinstance(data['tools'], list) or not data['tools']):
+        raise ValueError('Invalid uv tools manifest header')
+    names, commands = set(), set()
+    for item in data['tools']:
+        if (not isinstance(item, dict) or set(item) != {'package', 'commands'}
+                or not isinstance(item['package'], str)
+                or not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', item['package'])
+                or item['package'] in names or not isinstance(item['commands'], list)
+                or not item['commands']):
+            raise ValueError('Invalid or duplicate uv package declaration')
+        names.add(item['package'])
+        for command in item['commands']:
+            if (not isinstance(command, str)
+                    or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*', command)
+                    or command in commands):
+                raise ValueError('Invalid or duplicate uv command declaration')
+            commands.add(command)
+    return data
+
+
+def environment() -> dict[str, str]:
+    """Use only fixed service paths; ignore caller indexes, proxies and Python config."""
+    return {
+        'PATH': '/usr/bin:/usr/sbin', 'HOME': str(BASE / 'home'),
+        'LANG': 'C.UTF-8', 'UV_NO_PROGRESS': '1', 'UV_MANAGED_PYTHON': '1',
+        'UV_PYTHON_INSTALL_DIR': str(BASE / 'python'),
+        'UV_PYTHON_BIN_DIR': str(BASE / 'home/python-bin'),
+        'UV_TOOL_DIR': str(BASE / 'tools'), 'UV_TOOL_BIN_DIR': str(BASE / 'bin'),
+        'UV_CACHE_DIR': str(CACHE), 'PYTHONDONTWRITEBYTECODE': '1',
+    }
+
+
+def account() -> pwd.struct_passwd:
+    """Require the reserved identity, avoiding accidental access to another account."""
+    user = pwd.getpwnam(ACCOUNT)
+    if (user.pw_uid != IDENTITY or user.pw_gid != IDENTITY
+            or grp.getgrnam(ACCOUNT).gr_gid != IDENTITY
+            or user.pw_shell != '/usr/sbin/nologin'
+            or user.pw_dir != str(BASE / 'home')):
+        raise RuntimeError('uv-tools account collision: expected locked service UID/GID 395')
+    return user
+
+
+def directory(path: Path, owner: int, mode: int) -> None:
+    """Create one directory or validate its ownership; never follow/chown symlinks."""
+    try:
+        path.mkdir(mode=mode)
+    except FileExistsError:
+        info = path.lstat()
+        if (not stat.S_ISDIR(info.st_mode) or info.st_uid != owner
+                or info.st_gid != owner or stat.S_IMODE(info.st_mode) != mode):
+            raise RuntimeError(f'Unexpected ownership/type/permissions: {path}')
+    else:
+        os.chown(path, owner, owner)
+        path.chmod(mode)
+
+
+def setup() -> None:
+    """Create the account and empty store; no network or package operations."""
+    for lookup, attribute in ((pwd.getpwuid, 'pw_name'), (grp.getgrgid, 'gr_name')):
+        try:
+            occupant = lookup(IDENTITY)
+        except KeyError:
+            continue
+        if getattr(occupant, attribute) != ACCOUNT:
+            raise RuntimeError('Reserved uv-tools UID/GID 395 is already in use')
+    subprocess.run(['/usr/bin/systemd-sysusers', SYSUSERS], check=True,
+                   env={'PATH': '/usr/bin:/usr/sbin', 'LANG': 'C.UTF-8'}, cwd='/')
+    account()
+    directory(BASE, 0, 0o755)
+    for name in ('python', 'tools', 'bin'):
+        directory(BASE / name, IDENTITY, 0o755)
+    directory(BASE / 'home', IDENTITY, 0o700)
+    directory(CACHE, IDENTITY, 0o700)
+
+
+def uv(*args: str, capture: bool = False) -> str:
+    """Execute uv without root privileges, supplementary groups or inherited config."""
+    user = account()
+    result = subprocess.run(
+        [UV, '--config-file', str(CONFIG), *args], check=True, text=True,
+        stdout=subprocess.PIPE if capture else None, env=environment(),
+        cwd=BASE / 'home', user=user.pw_uid, group=user.pw_gid, extra_groups=[],
+        umask=0o022,
+    )
+    return result.stdout or ''
+
+
+def installed() -> dict[str, str]:
+    """Read uv's public list output; reject unfamiliar records instead of reinstalling."""
+    result = {}
+    for line in uv('tool', 'list', capture=True).splitlines():
+        if not line.strip() or line.startswith('- '):
+            continue
+        match = re.fullmatch(r'([a-z0-9][a-z0-9_.-]*) v(\S+)', line)
+        if not match:
+            raise RuntimeError(f'Unexpected uv tool list record: {line}')
+        result[match[1]] = match[2]
+    return result
+
+
+def validate_tools(manifest: dict[str, Any], packages: dict[str, str]) -> None:
+    """Require expected command links and dependency consistency for selected tools."""
+    for tool in manifest['tools']:
+        name = tool['package']
+        if name not in packages:
+            continue
+        for command in tool['commands']:
+            path = BASE / 'bin' / command
+            if not path.is_file() or not os.access(path, os.X_OK):
+                raise RuntimeError(f'Missing executable for {name}: {path}')
+        uv('--offline', 'pip', 'check', '--python', str(BASE / 'tools' / name / 'bin/python'))
+
+
+def inventory(manifest: dict[str, Any]) -> dict[str, Any]:
+    """Capture actual resolved versions without downloading or updating anything."""
+    packages = installed()
+    return {
+        'schema': 1, 'python_request': manifest['python'],
+        'manifest_sha256': hashlib.sha256(MANIFEST.read_bytes()).hexdigest(),
+        'config_sha256': hashlib.sha256(CONFIG.read_bytes()).hexdigest(),
+        'uv_version': uv('--version', capture=True).strip(),
+        'tools': packages,
+        'python': json.loads(uv('--offline', 'python', 'list', '--only-installed',
+                                '--output-format', 'json', capture=True)),
+        'dependencies': {name: uv('--offline', 'pip', 'freeze', '--python',
+                                  str(BASE / 'tools' / name / 'bin/python'),
+                                  capture=True).splitlines() for name in packages},
+    }
+
+
+def manage(action: str) -> None:
+    """Run a fixed shared operation. update never installs missing manifest entries."""
+    manifest = read_manifest()
+    if action == 'setup':
+        setup()
+        return
+    if action == 'update' and not (BASE / 'tools').exists():
+        print('Shared uv tools are not installed; skipping update.')
+        return
+    setup()
+    packages = installed()
+    if action == 'inventory':
+        print(json.dumps(inventory(manifest), indent=2))
+        return
+    if action == 'install':
+        for tool in manifest['tools']:
+            if tool['package'] not in packages:
+                uv('tool', 'install', '--managed-python', '--python', manifest['python'],
+                   tool['package'])
+    elif packages:
+        uv('python', 'upgrade')
+        uv('tool', 'upgrade', '--all')
+    else:
+        print('No shared uv tools installed; skipping update.')
+        return
+    validate_tools(manifest, installed())
+
+
+def user_update() -> None:
+    """Update shared and invoking-user stores, reporting failure from either scope."""
+    if os.geteuid() == 0:
+        raise RuntimeError('Run ujust update as your normal login user')
+    status = subprocess.run(['/usr/bin/sudo', '-n', HELPER, 'update']).returncode
+    for args in (['python', 'upgrade'], ['tool', 'upgrade', '--all']):
+        result = subprocess.run([UV, *args])
+        status = status or result.returncode
+    if status:
+        raise RuntimeError('One or more shared/personal uv updates failed; see output above')
+
+
+def main() -> None:
+    """Dispatch exact actions; privileged mutations share a no-follow root lock."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('action', choices=('setup', 'install', 'update', 'inventory', 'user-update'))
+    args = parser.parse_args()
+    if args.action == 'user-update':
+        user_update()
+        return
+    if os.geteuid() != 0:
+        raise RuntimeError('Shared uv maintenance requires the authorized ujust command')
+    descriptor = os.open(LOCK, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, 'w') as lock:
+        info = os.fstat(lock.fileno())
+        if (info.st_uid != 0 or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                or stat.S_IMODE(info.st_mode) != 0o600):
+            raise RuntimeError('Unsafe shared uv lock file')
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        manage(args.action)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (OSError, ValueError, KeyError, RuntimeError, subprocess.CalledProcessError) as error:
+        print(f'uv-tools: {error}', file=sys.stderr)
+        sys.exit(1)
