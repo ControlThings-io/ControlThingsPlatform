@@ -106,15 +106,27 @@ and `DECISIONS.md`, not these shared files.
   output bytes free at export. It then failed before compression because packaging
   invoked `7zz`; Ubuntu's installed `7zip` 23.01+dfsg-11 package provides `7z`.
   Verified the exact Ubuntu package contents. Fixed executable discovery to accept
-  `7zz` or `7z` and reject missing tools before any VMDK assembly (uncommitted).
+  `7zz` or `7z` and reject missing tools before any VMDK assembly (`1d3d9bb`).
   Regression checks cover both command names and missing-tool early failure.
   VMDK integrity/extraction/checksums, disk orchestration and retained payload
   checks passed using the actual Ubuntu 23.01 binary on a PATH without `7zz`.
-  Full-size compression/upload, refreshed ISO build/install and guest boot remain
-  unvalidated. Next: commit/push when authorized, then dispatch a new workflow
-  revision using the retained payload below; rerunning old jobs uses old code.
-  Verify VMDK 7z packaging and exact downloads/checksums, refreshed ISO installation
-  and guest boot. See
+  Successful VMDK run
+  [39691650438](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/39691650438)
+  at `1d3d9bb` reused that payload and completed full assembly, 7z packaging,
+  checksums and GitHub uploads. Timing review on 2026-10-22: VMDK job 1h53m24s;
+  setup 2m01s, input pulls/manifest setup about 4m17s, OSBuild build environment
+  3m57s, raw image installation/configuration 31m11s (bootc install 30m22s),
+  VMDK creation 2m24s, export/object-store cleanup about 40s, then 66m34s until
+  7-Zip completion, checksums/metadata about 1m30s and uploads/finalization 51s.
+  The 66m34s interval includes remaining runner cleanup, validation/configuration
+  and compression: 7-Zip buffered its output, so exact compression-only duration
+  cannot be isolated. Disk bytes: 30,117,199,872; archive bytes: 7,847,124,461.
+  The separate earlier QCOW2 job in run `39663118651` took 47m46s; these are
+  different runners/runs, not a controlled benchmark. Refreshed ISO build/install,
+  downloaded-byte verification and guest boot remain unvalidated. Next: validate
+  downloads and guest boot; consider explicit phase timing and a compression
+  speed/size benchmark before changing settings. No runtime changes made during
+  this timing review. See
   [build and packaging details](../DEVELOPMENT.md#disk-builder-and-configuration).
   Retry inputs from the successful payload descriptor: source tag
   `latest-20261021-6d187a6`, payload
