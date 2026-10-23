@@ -222,7 +222,11 @@ def user_update() -> None:
 
 
 def main() -> None:
-    """Dispatch exact actions; privileged mutations share a no-follow root lock."""
+    """Dispatch exact actions; privileged mutations share a no-follow root lock.
+
+Create /run/lock in unbooted build containers, preserving its existing system
+permissions on running hosts. Never accept a symlink or non-root-owned parent.
+"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=('setup', 'install', 'update', 'inventory', 'user-update'))
     args = parser.parse_args()
@@ -231,6 +235,10 @@ def main() -> None:
         return
     if os.geteuid() != 0:
         raise RuntimeError('Shared uv maintenance requires the authorized ujust command')
+    LOCK.parent.mkdir(mode=0o755, exist_ok=True)
+    parent = LOCK.parent.lstat()
+    if not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0:
+        raise RuntimeError('Unsafe shared uv lock directory')
     descriptor = os.open(LOCK, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     with os.fdopen(descriptor, 'w') as lock:
         info = os.fstat(lock.fileno())

@@ -26,7 +26,7 @@ if os.geteuid() != 0:
 with tempfile.TemporaryDirectory(prefix='uv-tools-sandbox-') as temporary:
     work = Path(temporary)
     work.chmod(0o755)
-    for directory in ('etc', 'var/lib', 'var/cache', 'run/lock', 'libexec', 'share', 'sysusers', 'units'):
+    for directory in ('etc', 'var/lib', 'var/cache', 'run', 'libexec', 'share', 'sysusers', 'units'):
         (work / directory).mkdir(parents=True, exist_ok=True)
     (work / 'etc/passwd').write_text('root:x:0:0:root:/root:/bin/bash\n')
     (work / 'etc/group').write_text('root:x:0:\nwheel:x:10:\n')
@@ -133,12 +133,21 @@ else: raise RuntimeError(args)
 
     run('update')  # No payload: no creation or downloads.
     assert not (work / 'var/lib/uv-tools').exists()
+    # Container builds have no boot-time tmpfiles initialization of /run/lock.
+    lock_directory = work / 'run/lock'
+    assert lock_directory.stat().st_uid == 0
+    assert lock_directory.stat().st_mode & 0o7777 == 0o755
+    lock_inode = (lock_directory / 'uv-tools.lock').stat().st_ino
     original_passwd = (work / 'etc/passwd').read_text()
     (work / 'etc/passwd').write_text(original_passwd + 'occupied:x:395:395::/:/usr/sbin/nologin\n')
     run('setup', success=False)
     assert 'uv-tools' not in (work / 'etc/group').read_text()
     (work / 'etc/passwd').write_text(original_passwd)
+    # Preserve the system's shared lock directory mode and the lock inode.
+    lock_directory.chmod(0o1777)
     run('setup')
+    assert (lock_directory / 'uv-tools.lock').stat().st_ino == lock_inode
+    assert lock_directory.stat().st_mode & 0o7777 == 0o1777
     assert 'uv-tools:x:395:395:' in (work / 'etc/passwd').read_text()
     assert 'uv-tools:!' in (work / 'etc/shadow').read_text()
     store = work / 'var/lib/uv-tools'
@@ -219,5 +228,10 @@ urh autoclose
     before = (work / 'etc/passwd').read_bytes()
     run('update', success=False)
     assert (work / 'etc/passwd').read_bytes() == before
+    lock.unlink()
+    lock_directory.rmdir()
+    lock_directory.symlink_to('/var/cache')
+    result = run('setup', success=False)
+    assert 'Unsafe shared uv lock directory' in result.stderr
 
 print('PASS isolated real sysusers, UID/GID drop, protected stores, reruns, metadata and failure recovery')

@@ -8,7 +8,7 @@ and `DECISIONS.md`, not these shared files.
 
 ## Current work
 
-- Implemented shared uv tools on 2026-10-22 against main `48f093b`: ctmodbus,
+- Implemented shared uv tools on 2026-10-22 (committed as `8fdc7a5`): ctmodbus,
   ctserial, greatfet, rfcat and urh, with managed Python 3.13. The final selection
   supersedes the earlier ctmodbus/ctserial exclusions; ctui is a required dependency,
   not a standalone selection. The common manual installer and disk preparation
@@ -36,10 +36,20 @@ and `DECISIONS.md`, not these shared files.
   offscreen mode and the ControlThings TUIs used a dummy terminal with automatic
   exit. URH's isolated source build also passed locally. These tests did not
   modify host installations/accounts or run real hardware operations.
+  Container CI [run 39917151287](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/39917151287)
+  at `8fdc7a5` failed during `uv-tools setup`: the unbooted build container had no
+  `/run/lock`, so opening the maintenance lock failed before account/store setup.
+  Fixed on 2026-10-23 by creating the missing lock directory in the root-only
+  helper path, preserving existing system permissions and rejecting unsafe parents.
+  The isolated fixture now starts with an empty `/run`; it reproduced the original
+  error before the fix and passed afterward, including real sysusers/privilege
+  checks, existing lock inode/mode preservation and lock-directory symlink rejection.
+  The uv policy/update regression and whitespace review also passed. A corrected
+  full image build and remote CI rerun remain pending.
   Remaining: fresh full image/payload build, guest login/PATH/desktop behavior,
   sudo authorization, SELinux labels, automatic service execution/toggle/retry,
   multiple real users, OS-update persistence, ARM64 builds and physical device/SDR
-  backend coverage. No new image build, publication or remote CI was performed.
+  backend coverage. No publication or CI rerun was performed during the repair.
 
 - README policy clarified on 2026-10-20: repository instructions now require
   explicit approval for any README edit, with suggestions only until approved.
