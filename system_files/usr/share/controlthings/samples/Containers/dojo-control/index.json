@@ -1,0 +1,1 @@
+{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:344a9d19a180538cee66dd67a6e4f057f6002a80a5559b0959aa2a3f8b16a083","size":2276,"annotations":{"org.opencontainers.image.ref.name":"ghcr.io/controlthings-io/dojo-control:stable"}}]}
