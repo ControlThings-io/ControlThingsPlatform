@@ -45,8 +45,10 @@ and `DECISIONS.md`, not these shared files.
   error before the fix and passed afterward, including real sysusers/privilege
   checks, existing lock inode/mode preservation and lock-directory symlink rejection.
   The uv policy/update regression and whitespace review also passed. A corrected
-  full image build and remote CI rerun remain pending.
-  Remaining: fresh full image/payload build, guest login/PATH/desktop behavior,
+  full image build was subsequently reported validated by the user on 2026-10-24,
+  along with working uv tool integration. Exact artifacts, architectures and CI
+  run identities were not supplied; no independent remote CI verification is recorded.
+  Remaining validation details: guest login/PATH/desktop behavior,
   sudo authorization, SELinux labels, automatic service execution/toggle/retry,
   multiple real users, OS-update persistence, ARM64 builds and physical device/SDR
   backend coverage. No publication or CI rerun was performed during the repair.
