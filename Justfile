@@ -141,9 +141,10 @@ build $target_image=image_name $tag=default_tag:
 # Use Aurora's 256-layer limit and plain bootc layout; remove stale OSTree labels.
 # Temporary OCI output is cleaned on success/failure. Retag only after import;
 # propagate inspection, builder, import, tagging, and final bootc lint failures.
-# Fetch the pinned builder at most three times, five seconds apart. Retry the
+# Invoke the pinned builder pull at most three times, five seconds apart. Retry the
 # whole pull because Podman's retry classifier can miss registry HTTP errors.
-# Reuse a cached digest; run Chunkah once, without another implicit pull.
+# Use plain pull for the Ubuntu runner's Podman 4.9 compatibility; its internal
+# retries still apply. Run Chunkah once, without another implicit pull.
 rechunk $target_image=image_name $tag=default_tag:
     #!/usr/bin/env bash
 
@@ -154,7 +155,7 @@ rechunk $target_image=image_name $tag=default_tag:
     mkdir "$work_dir/output"
     podman inspect "${target_image}:${tag}" > "$work_dir/config.json"
     for attempt in 1 2 3; do
-        if podman pull --retry=0 --policy=missing "{{ chunkah_image }}"; then
+        if podman pull "{{ chunkah_image }}"; then
             break
         else
             pull_status=$?

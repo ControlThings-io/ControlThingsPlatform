@@ -1,22 +1,30 @@
 """Exercise the real Chunkah recipe with mocked Podman, without building images.
 
 Run ``python3 tests/check_rechunk.py`` from the repository root. Requires Python
-3.9+, Bash, and just. Checks exact source tags, configuration transfer, Aurora
+3.9+, Bash, just, and Podman. Checks exact source tags, configuration transfer, Aurora
 settings, bounded builder pulls, OCI import/retagging, final lint, cleanup, and
-failure propagation. Pull failures and recovery are simulated; sleeps are mocked.
+failure propagation. Every Podman invocation first passes through the installed
+CLI with ``--help`` to reject unsupported flags without executing the operation.
+Set ``RECHUNK_PODMAN`` to test a specific Podman binary. Pull failures and recovery
+are simulated; sleeps are mocked.
 Actual Chunkah output and VM boot/update behavior need integration validation.
 """
 
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 
 
 MOCK = r'''#!/usr/bin/env python3
-import json, os, pathlib, sys
+import json, os, pathlib, subprocess, sys
 args = sys.argv[1:]
+# run stops parsing options at the image name, so help must precede that name.
+parsed = subprocess.run([os.environ['RECHUNK_PODMAN'], args[0], '--help', *args[1:]],
+                        text=True, capture_output=True)
+assert parsed.returncode == 0, parsed.stderr
 command = args[0]
 if command == 'run':
     command = 'lint' if '--entrypoint' in args else 'builder'
@@ -32,8 +40,7 @@ if command == 'inspect':
         'containers.bootc': '1', 'org.opencontainers.image.version': 'fixture-version'
     }}}]))
 elif command == 'fetch':
-    assert args[:3] == ['pull', '--retry=0', '--policy=missing']
-    assert len(args) == 4 and args[3].startswith('quay.io/coreos/chunkah:latest@sha256:')
+    assert len(args) == 2 and args[1].startswith('quay.io/coreos/chunkah:latest@sha256:')
     calls = [json.loads(line) for line in pathlib.Path(os.environ['RECHUNK_CALLS']).read_text().splitlines()]
     attempts = sum(call[0] == 'pull' and not call[1].startswith('oci:') for call in calls)
     if attempts <= int(os.environ.get('RECHUNK_TRANSIENT', '0')):
@@ -79,6 +86,8 @@ with pathlib.Path(os.environ['RECHUNK_WAITS']).open('a') as log:
 '''
 
 with tempfile.TemporaryDirectory(prefix='ct-rechunk-') as directory:
+    real_podman = shutil.which(os.environ.get('RECHUNK_PODMAN', 'podman'))
+    assert real_podman, 'Podman is required for CLI compatibility checks'
     root = Path(directory)
     binary_dir = root / 'bin'
     binary_dir.mkdir()
@@ -95,7 +104,8 @@ with tempfile.TemporaryDirectory(prefix='ct-rechunk-') as directory:
     waits_file = root / 'waits'
     env = dict(os.environ, PATH=str(binary_dir) + os.pathsep + os.environ['PATH'],
                XDG_RUNTIME_DIR=str(root), TMPDIR=str(scratch),
-               RECHUNK_CALLS=str(calls_file), RECHUNK_WAITS=str(waits_file))
+               RECHUNK_CALLS=str(calls_file), RECHUNK_WAITS=str(waits_file),
+               RECHUNK_PODMAN=real_podman)
     for tag in ('latest', 'pr-12', 'ics410_l01'):
         scenarios = [(failure, 0) for failure in ('', 'inspect', 'fetch', 'builder', 'pull', 'tag', 'lint')]
         scenarios += [('', transient) for transient in (1, 2, 3)]
@@ -127,4 +137,4 @@ with tempfile.TemporaryDirectory(prefix='ct-rechunk-') as directory:
             assert stages == expected, (stages, expected, result.stderr)
             assert waits_file.read_text().splitlines() == ['5'] * max(stages.count('fetch') - 1, 0)
             assert not list(scratch.iterdir()), list(scratch.iterdir())
-    print('PASS 3 source tags; success, all 6 failure stages, transient recovery and retry exhaustion; configuration transfer and cleanup')
+    print('PASS real Podman CLI parsing; 3 source tags; success, all 6 failure stages, transient recovery and retry exhaustion; configuration transfer and cleanup')
