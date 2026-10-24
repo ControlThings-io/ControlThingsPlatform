@@ -8,16 +8,19 @@ and `DECISIONS.md`, not these shared files.
 
 ## Current work
 
-- Chunkah pull retry port to main is in progress on 2026-10-28. The code from
-  `19b2528` applied cleanly; its course-only status file is excluded, with this
-  shared summary replacing it. The queued `aea1ab8` compatibility fix is required
-  before image builds: the first patch uses pull flags unsupported by the Ubuntu
-  runner's Podman 4.9. Current `python3 tests/check_rechunk.py` passed for three
-  source tags, transient recovery, retry exhaustion, failure propagation and
-  cleanup; Podman operations and waits are mocked, so this does not establish CLI
-  compatibility. Next: complete the queued cherry-picks, rerun the final CLI-aware
-  regression, and validate container CI/repacking/publication. No image build or
-  remote CI was run during this conflict resolution.
+- Ported the Chunkah pull retry code from `19b2528` and `aea1ab8` to main on
+  2026-10-28; the second cherry-pick is resolved and staged, awaiting continuation.
+  Course-only status is excluded. The recipe uses plain `podman pull` at most
+  three times, five seconds apart, retaining Podman's internal retries for
+  compatibility with the Ubuntu runner's Podman 4.9. Chunkah runs once with
+  `--pull=never`; exhausted pulls stop before repacking/import/retagging. CI now
+  runs the rechunk regression before image builds. Current rechunk, registry-login
+  and workflow-tag regressions, Just formatting, shell syntax and whitespace
+  checks passed. The rechunk fixture checks real host Podman CLI parsing; image
+  operations and waits are mocked. No image build or remote CI was run during
+  this port. Next: complete the queued cherry-picks and validate container CI,
+  repacking, publication and signing. See [build details](../DEVELOPMENT.md#rechunking)
+  and [decision](DECISIONS.md#chunkah-rechunking--2026-10-15).
 
 - Implemented shared uv tools on 2026-10-22 (committed as `8fdc7a5`): ctmodbus,
   ctserial, greatfet, rfcat and urh, with managed Python 3.13. The final selection

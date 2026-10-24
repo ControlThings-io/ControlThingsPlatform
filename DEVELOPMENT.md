@@ -767,7 +767,13 @@ just rechunk $target_image $tag
 
 Build and rechunk using the same user's Podman storage. The builder image is
 digest-pinned in `Justfile`, with updates managed by Renovate. Temporary files
-are cleaned on success or failure. Changing layer layouts can require a larger
+are cleaned on success or failure. Before running Chunkah, the recipe invokes
+plain `podman pull` at most three times, waiting five seconds between failures;
+Podman's own internal retries remain enabled. This supports the CI runner's
+Podman 4.9. Chunkah then runs once with `--pull=never`; exhausted pulls stop before
+repacking, import or retagging. CI runs `python3 tests/check_rechunk.py` before
+image builds, checking real Podman CLI parsing with image operations and waits
+mocked. Changing layer layouts can require a larger
 first update; subsequent download savings need measurement. Rechunking does not
 eliminate changes inside RPM/DNF databases.
 

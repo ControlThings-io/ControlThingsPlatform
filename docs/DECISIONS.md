@@ -353,6 +353,17 @@ import before retagging, clean temporary files, and lint the result. Renovate
 maintains the pin; the legacy rechunker remains for explicit comparisons.
 This does not establish smaller downloads or eliminate RPM/DNF state churn.
 
+Accepted retry port to main — 2026-10-28: invoke the pinned builder pull at most
+three times, waiting five seconds between failed invocations, then run Chunkah
+once with `--pull=never`. Retry the whole pull to handle registry HTTP failures
+that Podman's internal retry classification can miss. Use plain `podman pull`
+for the Ubuntu runner's Podman 4.9 compatibility; internal retries remain enabled.
+This supersedes the first retry patch's unsupported `--retry`/`--policy` flags.
+Exhausted pulls stop before repacking/import/retagging, preserving temporary-file
+cleanup. CI checks real CLI parsing plus simulated recovery/failure boundaries
+before image builds; this does not establish full build/publication success.
+See [current validation](STATUS.md#current-work).
+
 ## Build-time DNF counting state — 2026-10-15
 
 Disable countme only for build package operations and remove regular per-repository

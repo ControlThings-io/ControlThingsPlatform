@@ -47,6 +47,9 @@ jobs:
         run: |
           just check
 
+      - name: Check rechunk CLI compatibility and retries
+        run: python3 tests/check_rechunk.py
+
       - name: Image Name
         id: image-name
         run: |
