@@ -1,6 +1,7 @@
 """Exercise retained payload identity/reuse without downloads, root or installers.
 
-Run with python3. Registry/Podman are command fixtures. This verifies failure
+Run with python3; requires 7zz or 7z for real VMDK packaging. Registry/Podman are command
+fixtures. This verifies failure
 boundaries and preparation/assembly separation, not registry access permissions
 or a real bootc import. The small real OCI transport check lives separately.
 """
@@ -15,6 +16,8 @@ import tempfile
 from unittest.mock import patch
 
 sys.dont_write_bytecode = True
+
+from disk_test_fixtures import assembly_command
 spec = importlib.util.spec_from_file_location('disk', 'scripts/build-disk.py')
 disk = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(disk)
@@ -99,6 +102,9 @@ with tempfile.TemporaryDirectory(prefix='ct-payload-reuse-') as temporary:
 
         def assemble(*args, capture=False):
             calls.append(args)
+            response = assembly_command(args)
+            if response is not None:
+                return response
             if args[:3] == ('sudo', 'skopeo', 'inspect'):
                 return registry(*args, capture=capture)
             if '{{.Id}}' in args:
@@ -118,13 +124,17 @@ with tempfile.TemporaryDirectory(prefix='ct-payload-reuse-') as temporary:
         assert ('sudo', 'podman', 'tag', reference, metadata['update_ref']) in calls
         image_builder = next(cmd for cmd in calls if '--bootc-ref' in cmd)
         assert '--bootc-pull-container' not in image_builder
-        assert image_builder[image_builder.index('build') + 1] == (
+        assert image_builder[image_builder.index('manifest' if kind == 'vmdk' else 'build') + 1] == (
             'bootc-generic-iso' if kind == 'iso' else kind)
         saved = json.loads(next(output.glob('*.source.json')).read_text())
         assert saved['payload_ref'] == reference
         assert saved['update_ref'] == metadata['update_ref']
-        assert saved['artifact_bytes'] == len(b'fixture image')
+        assert saved['artifact_bytes'] == (output / saved['filename']).stat().st_size
         assert saved['tools'] == tools
+        if kind == 'vmdk':
+            assert saved['vmdk_subformat'] == 'monolithicSparse'
+            assert not any(cmd[:2] == ('qemu-img', 'convert') for cmd in calls)
+            assert (output / saved['bundle_filename']).is_file()
         assert '-smoke' in saved['filename']
         # Every retained-assembly command failure aborts; no package fallback.
         for index in range(len(calls)):
@@ -152,6 +162,9 @@ with tempfile.TemporaryDirectory(prefix='ct-payload-reuse-') as temporary:
                     raise AssertionError(f'Ignored assembly failure {index}')
                 prepare.assert_not_called()
             assert not list(failed_output.glob('*.sha256'))
+            assert not list(failed_output.glob('*.source.json'))
+            assert not list(failed_output.glob('*.7z'))
+            assert not list(failed_output.glob('.bundle-*'))
 
     # Verify config identity before tagging/running a pulled payload.
     def wrong_id(*args, capture=False):

@@ -104,6 +104,18 @@ esac
 ''')
     helper = work / 'libexec/controlthings-tools'
     helper.write_bytes((ROOT / 'system_files/usr/libexec/controlthings-tools').read_bytes())
+    executable(work / 'libexec/uv-tools', '''
+echo "uv-tools $*" >> /tmp/commands
+case "$1" in
+    install)
+        test "${CT_TEST_FAIL_UV:-0}" = 0
+        mkdir -p /var/lib/uv-tools/tools/fixture
+        echo retained-python-tool > /var/lib/uv-tools/tools/fixture/installed
+        ;;
+    inventory) echo '{"tools":{"fixture":"1.0"},"manifest_sha256":"fixture-hash"}' ;;
+    *) exit 1 ;;
+esac
+''')
     command = [
         'bwrap', '--unshare-user', '--uid', '0', '--gid', '0',
         '--unshare-pid', '--unshare-ipc', '--unshare-uts',
@@ -142,6 +154,8 @@ esac
     assert not list((work / 'out').glob('*.tar.zst'))
     installed = json.loads((work / 'out/installed.json').read_text())
     assert installed['homebrew_versions'] == ['fixture 1.0']
+    assert installed['uv']['tools'] == {'fixture': '1.0'}
+    assert (work / 'var/lib/uv-tools/tools/fixture/installed').is_file()
     assert installed['manifests_sha256']['controlthings.Brewfile'] == hashlib.sha256(custom.read_bytes()).hexdigest()
     assert set(installed['manifests_sha256']) == {'controlthings.Brewfile', 'system-flatpaks.Brewfile'}
     assert installed['flatpak'] == [
@@ -183,4 +197,14 @@ esac
         if failure == 'CT_TEST_FAIL_SANDBOX':
             assert 'flatpak' not in failed_commands
 
-print('Disk-only payload shell populated Brew/Flatpak stores and metadata in an isolated filesystem')
+    (work / 'out/installed.json').unlink()
+    failure_command = command[:-2] + ['--setenv', 'CT_TEST_FAIL_UV', '1'] + command[-2:]
+    result = subprocess.run(failure_command, text=True, capture_output=True)
+    assert result.returncode != 0
+    assert not (work / 'out/installed.json').exists()
+
+container = (ROOT / 'disk_config/tools/Containerfile').read_text()
+assert 'COPY --from=tools-builder /var/lib/uv-tools /var/lib/uv-tools' in container
+assert 'COPY --from=tools-builder /var/cache/uv-tools' not in container
+
+print('Disk-only payload shell populated Brew/Flatpak/uv stores and metadata in an isolated filesystem')

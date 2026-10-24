@@ -167,8 +167,9 @@ with patch.object(tools, 'BREW', brew), patch.object(tools, 'run', record):
         tools.install(manifest['brew'], manifest['flatpak'])
     assert calls[1][0:3] == ('flatpak', 'remote-add', '--system')
     assert calls[2][0:3] == ('flatpak', 'install', '--system')
-    assert calls[-1] == ('flatpak', 'override', '--user', '--socket=x11', 'org.zaproxy.ZAP')
-    assert all(call[0] not in ('pkexec', 'sudo') for call in calls)
+    assert calls[-2] == ('flatpak', 'override', '--user', '--socket=x11', 'org.zaproxy.ZAP')
+    assert calls[-1] == ('/usr/bin/sudo', '-n', '/usr/libexec/uv-tools', 'install')
+    assert all(call[0] not in ('pkexec', 'sudo', '/usr/bin/sudo') for call in calls[:-1])
     calls.clear()
     brew.is_file.return_value = False
     with patch.object(tools.os, 'geteuid', return_value=1000):

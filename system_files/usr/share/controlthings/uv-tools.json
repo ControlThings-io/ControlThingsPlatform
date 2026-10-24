@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "python": "3.13",
+  "tools": [
+    {"package": "ctmodbus", "commands": ["ctmodbus"]},
+    {"package": "ctserial", "commands": ["ctserial"]},
+    {"package": "greatfet", "commands": ["greatfet", "gf", "greatfet_info"]},
+    {"package": "rfcat", "commands": ["rfcat"]},
+    {"package": "urh", "commands": ["urh", "urh_cli"]}
+  ]
+}

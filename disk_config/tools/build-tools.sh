@@ -70,6 +70,11 @@ ostree --repo=/var/lib/flatpak/repo refs | sort > /tmp/controlthings-flatpak-ref
 while IFS= read -r ref; do
     printf '%s %s\n' "$ref" "$(ostree --repo=/var/lib/flatpak/repo rev-parse "$ref")"
 done < /tmp/controlthings-flatpak-refs.txt > /out/flatpak-commits.txt
+
+# Install at the final absolute paths, as the image's reserved service account.
+# Cache stays in the disposable builder; managed runtimes and tools are retained.
+/usr/libexec/uv-tools install
+/usr/libexec/uv-tools inventory > /out/uv-tools.json
 python3 - <<'PY'
 import json
 from pathlib import Path
@@ -80,6 +85,7 @@ metadata = {
     'architecture': (output / 'flatpak-architecture.txt').read_text().strip(),
     'homebrew_versions': (output / 'homebrew-versions.txt').read_text().splitlines(),
     'flatpak_commits': dict(line.split() for line in (output / 'flatpak-commits.txt').read_text().splitlines()),
+    'uv': json.loads((output / 'uv-tools.json').read_text()),
 }
 (output / 'installed.json').write_text(json.dumps(metadata, indent=2) + '\n')
 PY

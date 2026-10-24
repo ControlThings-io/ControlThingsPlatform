@@ -6,7 +6,8 @@ The immutable Brewfile accepts simple brew/flatpak declarations, not Ruby code.
 as JSON; optional upstream bundles are never read. `brewfile` and `flatpak-ids`
 print only ControlThings entries. `install` runs as the Brew owner and uses
 Flatpak's native authorization for the fixed ControlThings Flatpak list. It never
-removes unlisted software. Nothing runs automatically at boot or during container updates.
+removes unlisted software. The final Python step delegates to the restricted shared
+uv installer. Nothing is installed automatically at boot or during container updates.
 All subprocess failures propagate; explicit installation may download packages.
 """
 
@@ -149,7 +150,7 @@ def install_flatpaks(apps: list[str]) -> None:
 
 
 def install(brews: list[str], apps: list[str]) -> None:
-    """Add formulae without upgrades, then install system Flatpaks as this user."""
+    """Add formulae/Flatpaks as this user, then authorize shared Python installation."""
     if os.geteuid() == 0:
         raise RuntimeError('Run ujust install-controlthings-tools as your normal login user')
     if not BREW.is_file():
@@ -161,6 +162,7 @@ def install(brews: list[str], apps: list[str]) -> None:
         brewfile.write_text(''.join(f'brew "{name}"\n' for name in brews))
         run(str(BREW), 'bundle', 'install', '--no-upgrade', f'--file={brewfile}')
     install_flatpaks(apps)
+    run('/usr/bin/sudo', '-n', '/usr/libexec/uv-tools', 'install')
 
 
 def main() -> None:

@@ -8,6 +8,51 @@ and `DECISIONS.md`, not these shared files.
 
 ## Current work
 
+- Implemented shared uv tools on 2026-10-22 (committed as `8fdc7a5`): ctmodbus,
+  ctserial, greatfet, rfcat and urh, with managed Python 3.13. The final selection
+  supersedes the earlier ctmodbus/ctserial exclusions; ctui is a required dependency,
+  not a standalone selection. The common manual installer and disk preparation
+  use the same manifest/helper. Stores live under `/var/lib/uv-tools`, owned by
+  the reserved non-login UID/GID 395; normal OS builds create only empty stores
+  and integration files. Wheel administrators receive fixed install/update
+  permissions; package builds run without root or supplementary groups. Bash/fish
+  permit personal overrides. URH has a desktop entry; GreatFET/RfCat USB rules ship
+  with the OS. See [implementation](../DEVELOPMENT.md#shared-python-tools-with-uv)
+  and [decisions](DECISIONS.md#shared-python-tools--2026-10-22).
+  Manual `ujust update`/`upgrade` delegates to Aurora before shared/personal uv
+  updates. A top-level recipe avoids Just's imported-recipe precedence issue.
+  Automatic shared updates use the existing uupd services and timer/toggle
+  behavior, with no independent timer or uv-only enabled-state gate. Existing
+  tools are preserved on install reruns and manifest removal; updates never add
+  missing selections. Disk metadata records runtime and dependency versions.
+  Passed policy/manual-installer/payload/disk-orchestration/reuse regressions,
+  actual Just recipe/alias/failure-boundary execution, Bash/fish syntax, sudoers,
+  udev/desktop validation and systemd unit verification. Private namespace checks
+  exercised real sysusers, privilege dropping, account collisions, normal-user
+  access, unsafe permissions, additive reruns and failed-install recovery.
+  Real isolated AMD64 installation/update/inventory passed with uv 0.12.24,
+  CPython 3.13.16, ctmodbus 0.6.0, ctserial 0.5.0, greatfet 2026.0.0, rfcat 2.0.1
+  and urh 2.10.0. All five passed offline startup as a normal user; URH used Qt
+  offscreen mode and the ControlThings TUIs used a dummy terminal with automatic
+  exit. URH's isolated source build also passed locally. These tests did not
+  modify host installations/accounts or run real hardware operations.
+  Container CI [run 39917151287](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/39917151287)
+  at `8fdc7a5` failed during `uv-tools setup`: the unbooted build container had no
+  `/run/lock`, so opening the maintenance lock failed before account/store setup.
+  Fixed on 2026-10-23 by creating the missing lock directory in the root-only
+  helper path, preserving existing system permissions and rejecting unsafe parents.
+  The isolated fixture now starts with an empty `/run`; it reproduced the original
+  error before the fix and passed afterward, including real sysusers/privilege
+  checks, existing lock inode/mode preservation and lock-directory symlink rejection.
+  The uv policy/update regression and whitespace review also passed. A corrected
+  full image build was subsequently reported validated by the user on 2026-10-24,
+  along with working uv tool integration. Exact artifacts, architectures and CI
+  run identities were not supplied; no independent remote CI verification is recorded.
+  Remaining validation details: guest login/PATH/desktop behavior,
+  sudo authorization, SELinux labels, automatic service execution/toggle/retry,
+  multiple real users, OS-update persistence, ARM64 builds and physical device/SDR
+  backend coverage. No publication or CI rerun was performed during the repair.
+
 - README policy clarified on 2026-10-20: repository instructions now require
   explicit approval for any README edit, with suggestions only until approved.
   Its scope is marketing and user help. The unapproved wallpaper addition was
@@ -15,7 +60,7 @@ and `DECISIONS.md`, not these shared files.
   and decisions in DECISIONS. Content and whitespace review passed.
 
 - Implemented the Plasma Login Manager default background change to Aquila Aurea
-  Machina on 2026-10-20 (uncommitted; based on `d84ff91`). The build updates only
+  Machina on 2026-10-20 (committed as `f5f079b`). The build updates only
   `Image` and `PreviewImage` in Aurora's `/usr/lib/plasmalogin/defaults.conf`, using
   the existing wallpaper package, with required-file/asset guards. Administrator
   overrides in `/etc/plasmalogin.conf` retain precedence. User-supplied VM output
@@ -45,24 +90,93 @@ and `DECISIONS.md`, not these shared files.
   tracking links and revisit criteria are in the decision entry. This is a
   project watch-list item, not a scheduled background monitor.
 
-- Added AMD64 VMDK assembly for VMware Workstation and independent QCOW2/ISO/VMDK
-  workflow checkboxes (`4e88610`). QCOW2 alone defaults on; empty selections
-  and ARM64 VMDK fail before preparation. All selected outputs reuse the same
-  application payload, with native builder output, checksums, metadata, and
-  optional S3 uploads. QCOW2/VMDK share Btrfs and the 64 GiB root minimum.
-  The workflow's old `format` input is replaced by boolean inputs; local CLI
-  preflight retains `both` as an ISO/QCOW2 alias. VM configuration and manual
-  Workstation tests are owned by the user; OVA packaging is not included.
-  Disk orchestration and retained-payload regressions passed with external
-  commands mocked, including all 16 format/architecture selections, VMDK native
-  target/naming/checksums, reuse without preparation, and failure propagation.
-  Workflow shell syntax and whitespace checks passed. Registry inspection and
-  execution of the pinned builder (`9a16a7085eb7…`) succeeded; its generic image
-  listing includes VMDK, but does not expose bootc targets. This does not validate
-  the bootc/Btrfs configuration. No VMDK image, remote CI run, or Workstation boot
-  has been validated. Next: build VMDK from a
-  current source (or matching retained payload), then manually verify boot,
-  apps, offline operation, and persistence across an OS update.
+- VMDK `.7z` packaging and direct QCOW2 downloads implemented on 2026-10-21
+  (committed as `6d187a6`), extending the direct monolithicSparse/VM bundle work
+  committed as `fb67d62`. VMDK uses host 7-Zip, LZMA2 level 5, a 32 MiB dictionary,
+  two threads and non-solid mode. Temporary hard-link staging avoids another
+  disk copy; compression failures remove partial archives. Latest bundles contain
+  VMDK/VMX/VBOX; branch bundles contain VMDK/VMX. The same `.7z` uploads directly
+  to GitHub and S3, with disk/bundle checksums and JSON metadata kept separate.
+  QCOW2 uploads directly to GitHub; checksums, manifest and source metadata move
+  into a separate metadata ZIP. CI QCOW2 filenames include run/attempt for unique
+  direct artifact names. QCOW2 S3 layout and ISO packaging are unchanged. No format
+  option was added. README and VM source templates are untouched.
+  Passed `tests/check_vmdk.py`, `tests/check_build_disk.py` and
+  `tests/check_disk_payload_reuse.py`: real local OSBuild QEMU-stage disk assembly,
+  content/write support, UUID/configuration preservation, 7z integrity/extraction,
+  exact channel membership and extracted bytes, checksums, missing-tool/partial
+  compression cleanup, CI/local naming, mocked build/registry failures, workflow
+  upload routing/S3 filters and embedded Bash syntax. Local 7zz version: 26.04.
+  These checks use small fixtures and mocked container/registry commands; they
+  do not establish full-size performance or guest boot success; subsequent CI
+  evidence is recorded below. Content/link and whitespace review passed.
+  User-reported monolithicSparse VMware/VirtualBox tests predate
+  `fb67d62`; exact artifact identities are unrecorded. Original native failures
+  used streamOptimized output (course run `39360470160`, attempt 1).
+  CI attempts at `6d187a6`, runs
+  [39659636082](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/39659636082)
+  and [39662488106](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/39662488106),
+  failed before preparation/assembly: the ISO dependency preflight received
+  `manifest unknown` for the Fedora installer digest pinned in
+  `disk_config/installer/Containerfile`. All three formats were selected, so the
+  shared preflight blocked them together; packaging/upload changes were not reached.
+  Live Skopeo metadata checks on 2026-10-21 reproduced the missing digest and
+  confirmed that the current Fedora 44 tag resolves for linux/amd64. This does not
+  establish why the old manifest disappeared or validate a replacement ISO build.
+  The QCOW2/VMDK-only run
+  [39663118651](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/39663118651)
+  passed resolution and payload preparation. QCOW2 assembly, direct disk upload
+  and the separate three-file metadata ZIP upload succeeded. VMDK's OSBuild
+  manifest finished successfully, then export failed with `No space left on device`
+  while copying the staged VMDK from the OSBuild store into `/output/vmdk` using
+  `cp --reflink=auto -a`. The 7z packaging/checksum and upload steps were not reached.
+  Jobs use separate runners; selecting QCOW2 did not consume the VMDK runner's
+  storage. Logs establish export-time space exhaustion, but do not quantify peak
+  allocated storage or the extra capacity needed. Download/guest checks remain.
+  Implemented the export/storage repair (committed as `9d8568d`): the VMDK runner creates
+  a private store under `/output`, uses a guarded hard-link export adapter, and
+  removes the store on success/failure before UUID updates and 7z packaging.
+  Export logs report logical/allocated disk size and free space. Refreshed the
+  ISO installer to Fedora 44 index `sha256:28f842889ffee5a2bfc1c1bd742a15c13b2f73a41a492312410a961e457e8d63`.
+  Live dependency preflight passed for AMD64 and ARM64. The sparse 5 GiB export
+  regression passed with local OSBuild 193 and OSBuild 194 inside the exact pinned
+  builder: same inode/allocation, content survival after store cleanup, and
+  rejection of symlinks, extra files, existing destinations and failed links.
+  Inspected the pinned runtime's export callback contract. Mocked runner checks
+  passed cleanup/setup/failure boundaries; disk orchestration, retained payload
+  and real VMDK packaging regressions passed.
+  Run [39682536214](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/39682536214)
+  at `9d8568d` confirms full privileged VMDK assembly and hard-link export succeeded:
+  30,131,027,968 logical bytes, 30,126,514,176 allocated bytes and 9,433,157,632
+  output bytes free at export. It then failed before compression because packaging
+  invoked `7zz`; Ubuntu's installed `7zip` 23.01+dfsg-11 package provides `7z`.
+  Verified the exact Ubuntu package contents. Fixed executable discovery to accept
+  `7zz` or `7z` and reject missing tools before any VMDK assembly (`1d3d9bb`).
+  Regression checks cover both command names and missing-tool early failure.
+  VMDK integrity/extraction/checksums, disk orchestration and retained payload
+  checks passed using the actual Ubuntu 23.01 binary on a PATH without `7zz`.
+  Successful VMDK run
+  [39691650438](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/39691650438)
+  at `1d3d9bb` reused that payload and completed full assembly, 7z packaging,
+  checksums and GitHub uploads. Timing review on 2026-10-22: VMDK job 1h53m24s;
+  setup 2m01s, input pulls/manifest setup about 4m17s, OSBuild build environment
+  3m57s, raw image installation/configuration 31m11s (bootc install 30m22s),
+  VMDK creation 2m24s, export/object-store cleanup about 40s, then 66m34s until
+  7-Zip completion, checksums/metadata about 1m30s and uploads/finalization 51s.
+  The 66m34s interval includes remaining runner cleanup, validation/configuration
+  and compression: 7-Zip buffered its output, so exact compression-only duration
+  cannot be isolated. Disk bytes: 30,117,199,872; archive bytes: 7,847,124,461.
+  The separate earlier QCOW2 job in run `39663118651` took 47m46s; these are
+  different runners/runs, not a controlled benchmark. Refreshed ISO build/install,
+  downloaded-byte verification and guest boot remain unvalidated. Next: validate
+  downloads and guest boot; consider explicit phase timing and a compression
+  speed/size benchmark before changing settings. No runtime changes made during
+  this timing review. See
+  [build and packaging details](../DEVELOPMENT.md#disk-builder-and-configuration).
+  Retry inputs from the successful payload descriptor: source tag
+  `latest-20261021-6d187a6`, payload
+  `ghcr.io/controlthings-io/controlthingsplatform-disk-payload@sha256:5b9f41f506571b34b2e6fc7a1fcf591eca4bfcbfb4b05b346531eb336aa1fb81`.
+  Payload retention remains manual; no new publication or CI dispatch was performed.
 
 - Removed the manual tool installer's `pkexec` wrapper (`cd57dc9`). System
   Flatpak remote/install commands now run as the Brew owner through native
@@ -224,6 +338,8 @@ proposals, not accepted fixes or measured savings.
    previously downloaded ISO test independently.
 4. Validate user background persistence and real capture hardware. Publish an ARM64
    source before attempting ARM64 disks; migrate legacy local disk recipes separately.
-5. Keep per-user uv provisioning deferred. Managed classroom accounts/home content,
+5. Validate the shared Python implementation in a fresh AMD64 guest through manual
+   and disk provisioning, automatic updates/toggle, personal overrides and physical
+   devices; then validate ARM64. Managed classroom accounts/home content,
    a complete Aurora fork/installer migration, and reproducibility optimizations
    remain proposals. Do not infer release readiness from smoke checks.
