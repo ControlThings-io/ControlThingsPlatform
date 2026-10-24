@@ -1,11 +1,27 @@
 # ICS410 L01 current status
 
-## Current work — 2026-10-20
+## Current work — 2026-10-24
 
 Workbook simplification is committed as `6a5f8c2`; main's authentication and
 reliability changes were merged as `39504c2`. Workbook API authentication is committed as `e24710a`. Shared history remains in
 [shared status](../STATUS.md); accepted course choices are in
 [course decisions](DECISIONS.md).
+
+- Container run [40080883375](https://github.com/ControlThings-io/ControlThingsPlatform/actions/runs/40080883375)
+  at `1626d43` passed checkout and the OS image build, then failed before Chunkah
+  execution: Quay returned HTTP 503 for the pinned builder manifest. Repacking,
+  publication and signing did not complete. A later live Skopeo metadata request
+  resolved the same AMD64 builder digest successfully; no pin change is needed.
+  The local `rechunk` repair fetches the pinned builder with at most three pull
+  attempts, five seconds apart, reuses cached images and disables nested Podman
+  retries. Chunkah runs once with `--pull=never`; exhausted pulls stop before
+  repacking/import/retagging, and all failure paths retain temporary-file cleanup.
+  Passed `tests/check_rechunk.py` (three source tags, transient recovery, exhausted
+  retries and all six failure stages), registry-login and workflow-tag regressions,
+  Just/Bash syntax and whitespace checks. Podman operations and retry waits in
+  these fixtures are mocked. No full local build or remote CI rerun was performed
+  for the repair. Next: submit the repair when authorized, rerun container CI and
+  verify repacking, publication and signing before preparing a fresh disk payload.
 
 - Explicit Bash invocation is committed as `73db909`. The launcher is now
   installed directly at `/usr/bin/workbook-update` (uncommitted cleanup), replacing
@@ -54,8 +70,8 @@ reliability changes were merged as `39504c2`. Workbook API authentication is com
   remains. The user launcher now tolerates Git restoring mode 0644; direct
   callers still need the upstream executable bit or explicit Bash invocation.
 - Firefox homepage remains `http://localhost/` (`5934cee`), with inherited editable
-  shortcuts/defaults. Course remains on normal Aurora stable with existing RPM
-  selections and OS automatic-update defaults disabled.
+  shortcuts/defaults. Course uses standard Aurora pinned to `stable-20261022.1`
+  (`b7d37dc`), with existing RPM selections and OS automatic-update defaults disabled.
 - Workflow still consumes `L01_PRIVATE_KEY`; local builds require
   `WORKBOOK_SSH_KEY_FILE`. See [build/operation instructions](DEVELOPMENT.md#ics410-l01-workbook).
 
@@ -120,7 +136,7 @@ this change does not migrate them or repair their checkouts or credentials.
   flags; run two successive updates. Build a fresh course disk and complete the
   guest checks above, including the user-reported upstream service correction.
 
-- Build the course OS container and prepare a fresh disk payload from that source;
+- Complete container repacking/publication, then prepare a fresh disk payload;
   verify its channel remains `ics410_l01`.
 - On a fresh course installation, check automatic timers are disabled, manual
   updates work, and `ujust toggle-updates` can enable updates.
@@ -128,4 +144,5 @@ this change does not migrate them or repair their checkouts or credentials.
   it; confirm Bazaar's first-login icon and Firefox/CyberChef launching.
 - Finish ISO installation and full-bundle capacity/offline application validation.
   Earlier QCOW2 smoke results on main do not establish the current course image's
-  behavior. Per-user uv provisioning remains deferred under the shared plan.
+  behavior. Shared uv provisioning follows the merged
+  [shared implementation](../STATUS.md#current-work); course guest coverage remains.
