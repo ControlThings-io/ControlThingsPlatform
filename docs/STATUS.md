@@ -8,6 +8,17 @@ and `DECISIONS.md`, not these shared files.
 
 ## Current work
 
+- Chunkah pull retry port to main is in progress on 2026-10-28. The code from
+  `19b2528` applied cleanly; its course-only status file is excluded, with this
+  shared summary replacing it. The queued `aea1ab8` compatibility fix is required
+  before image builds: the first patch uses pull flags unsupported by the Ubuntu
+  runner's Podman 4.9. Current `python3 tests/check_rechunk.py` passed for three
+  source tags, transient recovery, retry exhaustion, failure propagation and
+  cleanup; Podman operations and waits are mocked, so this does not establish CLI
+  compatibility. Next: complete the queued cherry-picks, rerun the final CLI-aware
+  regression, and validate container CI/repacking/publication. No image build or
+  remote CI was run during this conflict resolution.
+
 - Implemented shared uv tools on 2026-10-22 (committed as `8fdc7a5`): ctmodbus,
   ctserial, greatfet, rfcat and urh, with managed Python 3.13. The final selection
   supersedes the earlier ctmodbus/ctserial exclusions; ctui is a required dependency,
