@@ -1,6 +1,7 @@
 # Shared disk-build bundle and explicit installation list for existing systems.
 # Full custom bundle; Aurora defaults are excluded from disk preparation.
 # Simple brew/flatpak declarations only; parsed by controlthings-tools.
+
 brew "bat"
 brew "bettercap"
 brew "binwalk"
