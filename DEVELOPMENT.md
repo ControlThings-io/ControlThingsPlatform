@@ -213,8 +213,10 @@ records its successful setup version in `/etc/ublue/controlthings-groups` and
 skips later automatic runs at that version. Increment `GROUP_SETUP_VER` when a
 future policy change should reapply setup. Version 2 adds `dialout` after
 deployment on systems with a successful version 1 marker. An empty `wheel` group
-or failed setup does not record the new version; failures retry through systemd,
-and empty membership is checked again at the next boot.
+or failed setup does not record the new version. Empty membership exits 75
+(temporary failure), activating the service's existing `Restart=on-failure` and
+`RestartSec=30` settings. Setup retries during the same boot until administrators
+exist and all group updates succeed, without requiring another boot.
 
 For accounts created later, or for a non-administrator login account, run this as
 the user whose memberships should be updated:
@@ -223,8 +225,10 @@ the user whose memberships should be updated:
 ujust controlthings-groups
 ```
 
-Authorize the request, then log out completely and log back in. The
-[recipe](system_files/usr/share/ublue-os/just/60-custom.just) calls the same script
+Authorize the request, then log out completely and log back in. If automatic setup
+finishes after the first login, log out/back in to refresh that session's effective
+groups too. The [recipe](system_files/usr/share/ublue-os/just/60-custom.just) calls
+the same script
 with `--user USER`, bypassing the startup marker without changing it. Check the
 result with `id -nG` in a new session. Administrators can also explicitly run
 `sudo /usr/libexec/controlthings-groups --user USERNAME` for another local account.

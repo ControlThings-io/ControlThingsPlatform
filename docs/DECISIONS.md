@@ -317,6 +317,15 @@ provides capture and serial groups consistently. The manual marker-bypass and
 success-marker contracts remain unchanged. See
 [operation guidance](../DEVELOPMENT.md#controlthings-capture-groups).
 
+Accepted first-boot retry port — 2026-10-28: treat empty wheel membership as
+temporary failure (exit 75) without writing the success marker. The existing
+service retries every 30 seconds during the same boot, allowing setup after the
+initial administrator account is created. This supersedes the earlier successful
+empty-group exit that deferred setup until another boot. Preserve setup version
+2, administrator selection and explicit manual setup. The isolated regression
+checks administrator creation between attempts; real guest startup and effective
+login groups remain validation items in [STATUS.md](STATUS.md#current-work).
+
 ## New-user terminal MOTD default — 2026-10-17
 
 Seed `.config/no-show-user-motd` through `/etc/skel` so new users start with Aurora's

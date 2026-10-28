@@ -5,7 +5,8 @@
 # --user USER adds one local account regardless of the marker, without changing
 # it. Preserve existing memberships. Failures leave automatic setup retryable;
 # earlier successful additions may remain. Empty wheel membership writes no
-# marker, allowing setup after the initial administrator account is created.
+# marker and exits 75 (temporary failure) so the boot service retries after the
+# initial administrator account is created, without requiring another boot.
 set -euo pipefail
 
 GROUP_SETUP_VER=2
@@ -25,8 +26,8 @@ case "$#:${1:-}" in
         fi
         IFS=, read -r -a users <<< "$(getent group wheel | cut -d: -f4)"
         if (( ${#users[@]} == 0 )); then
-            echo "No wheel users yet; group setup will retry at the next boot."
-            exit 0
+            echo "No wheel users yet; group setup is pending and the boot service will retry."
+            exit 75
         fi
         ;;
     2:--user)

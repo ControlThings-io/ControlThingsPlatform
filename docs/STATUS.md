@@ -8,19 +8,23 @@ and `DECISIONS.md`, not these shared files.
 
 ## Current work
 
-- Serial-group port to main on 2026-10-28: the `72644c7` code is staged, adding
-  `dialout` alongside `wireshark` and `usbmon` for current wheel administrators
-  and explicit manual setup. Version 2 reapplies membership on existing systems;
-  existing groups and vendor GIDs are preserved. Course-only docs are excluded;
-  shared [guidance](../DEVELOPMENT.md#controlthings-capture-groups) and
+- Serial-group and first-boot retry port to main on 2026-10-28: `dialout` support
+  is committed as `283f23f`; the final `56b0305` retry patch is applied, awaiting
+  cherry-pick continuation. Setup version 2 adds `wireshark`, `usbmon` and `dialout`
+  to current wheel administrators and supports explicit manual setup, preserving
+  memberships and vendor GIDs. An empty wheel group now exits 75 without a marker,
+  activating the service's existing 30-second retries during the same boot.
+  Course-only docs are excluded; shared
+  [guidance](../DEVELOPMENT.md#controlthings-capture-groups) and
   [decision](DECISIONS.md#controlthings-capture-groups--2026-10-15) are updated.
-  The real isolated group regression passed, including version 1 migration,
-  repeated/manual setup, empty-wheel deferral and failure handling. Bash syntax
-  and recipe formatting passed; pkexec is mocked and host accounts were untouched.
-  The queued `56b0305` first-boot fix remains required to retry during the same
-  boot after administrator creation. Next: complete that cherry-pick, rerun the
-  final group regression, then validate fresh/upgrade boots, effective login
-  groups and serial-device access. No image, remote CI or guest test was run.
+  The final real isolated group regression passed, including version 1 migration,
+  repeat/manual setup, initial empty-wheel failure followed by administrator
+  creation and successful retry, failure handling and service restart policy.
+  Bash syntax, recipe formatting, documentation links and whitespace checks
+  passed; pkexec is mocked and host accounts were untouched. Next: finish the
+  cherry-pick and validate fresh/upgrade boots, effective login groups and serial
+  access. Inspect the guest service journal/marker; if setup completes after
+  login, log out/back in. No image build, remote CI or guest test was run.
 
 - Ported the Chunkah pull retry code from `19b2528` and `aea1ab8` to main on
   2026-10-28, committed as `018be34` and `d17afd0` respectively.
