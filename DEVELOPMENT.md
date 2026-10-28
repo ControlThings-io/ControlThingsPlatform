@@ -544,6 +544,13 @@ checkout or the disk generation date. For example:
 - `controlthingsplatform-latest-20261015-5118339-amd64-installer.iso`
 - `controlthingsplatform-latest-20261015-5118339-amd64.qcow2`
 - `controlthingsplatform-latest-20261015-5118339-amd64.vmdk`
+- `controlthingsplatform-latest-20261015-5118339-amd64.vmx`
+- `controlthingsplatform-latest-20261015-5118339-amd64.vbox`
+
+VMDK, VMX, VBOX and QCOW2 share the same channel/date/hash/architecture basename.
+Generated configurations reference the matching VMDK by its relative filename.
+Channel selection controls bundle membership and downloads independently of the
+workflow's checkout branch.
 
 At least one format must be selected. VMDK is restricted to AMD64; selecting
 ARM64 with VMDK fails before payload preparation. It uses `monolithicSparse` and
@@ -589,28 +596,35 @@ the inspected `latest` tag has no ARM64 payload. Publish an ARM64 source before
 using that platform; the resolver fails early when it is missing.
 
 VMDK downloads are compressed `.7z` bundles. Latest-channel bundles (including
-builds from dated `latest` tags) contain only the versioned VMDK,
-`controlthingsplatform.vmx`, and `controlthingsplatform.vbox`. Branch bundles
-contain only the VMDK and VMX. GitHub uploads the prebuilt `.7z` directly;
-a separate `vmdk-metadata` ZIP artifact holds the disk and bundle `.sha256` files,
-`.source.json`, and executed OSBuild manifest. Optional S3 uploads place that same
-`.7z` and the metadata/checksum files alongside each other; the unpacked VMDK is
-not uploaded separately.
+builds from dated `latest` tags) contain the versioned VMDK, VMX and VBOX, with no
+separate VBOX download. Branch bundles contain the versioned VMDK and VMX; their
+matching VBOX is a separate direct download, without a ZIP wrapper. Put the
+downloaded VBOX beside the extracted VMDK before opening it in VirtualBox.
+GitHub uploads the prebuilt `.7z` directly; a separate `vmdk-metadata` ZIP artifact
+holds the disk, bundle and any standalone VBOX `.sha256` files, `.source.json`,
+and executed OSBuild manifest. Optional S3 uploads place the same `.7z`, branch
+VBOX and metadata/checksum files alongside each other; the unpacked VMDK is not
+uploaded separately.
 
 QCOW2 is also a direct GitHub download, without a ZIP wrapper or an additional
 compression step. Its `.sha256`, `.source.json` and build manifest are in a
-separate `qcow2-metadata` ZIP artifact. CI-generated QCOW2 filenames append the
-workflow run and attempt before `.qcow2` so direct uploads remain distinct across
-runs and retries; local builds keep the date/hash filename above. S3 continues
+separate `qcow2-metadata` ZIP artifact. CI and local QCOW2 builds use the same
+date/hash basename as VMDK, without a workflow run/attempt suffix. S3 continues
 to receive the QCOW2 and individual metadata/checksum files. ISO packaging is
 unchanged: GitHub provides the image and metadata together in an uncompressed
 ZIP, while S3 receives the individual files.
 
+Retries within the same workflow run replace the matching direct QCOW2 or branch
+VBOX artifact; separate runs retain their own artifacts. The upload steps set
+`name` from the build command's actual filename outputs so `overwrite` targets
+the same artifact, as required by the
+[pinned upload action's deletion path](https://github.com/actions/upload-artifact/blob/cf430e030ddbb5b0abf93d22962f4752f3646cd9/src/upload/upload-artifact.ts#L64).
+
 Extract VMDK bundles with a 7z-capable tool, for example `7z x FILENAME.7z`.
-After placing a checksum file beside its corresponding `.7z`, QCOW2 or extracted
-disk, verify it with `sha256sum -c FILENAME.sha256`. Metadata records the original
-OS digest, disk-only payload image ID, tool versions, requested tag, update
-reference, builder, and workflow run. Same-day container rebuilds can reuse
+After placing a checksum file beside its corresponding `.7z`, QCOW2, standalone
+VBOX or extracted disk, verify it with `sha256sum -c FILENAME.sha256`. Metadata
+records the original OS digest, disk-only payload image ID, tool versions,
+requested tag, update reference, builder, and workflow run. Same-day container rebuilds can reuse
 date/hash tags; the recorded identities distinguish their contents. CI VMDK
 bundle names contain the workflow run and attempt so repeated runs remain separate.
 
@@ -660,8 +674,9 @@ allocated disk bytes and free output space. Host
 `qemu-img` (`qemu-utils` on Ubuntu) validates capacity, subformat, uncompressed
 extents and a self-contained disk before packaging.
 
-The build reads the [VM templates](disk_config/virtualization/) without editing
-them. Generated VMX copies use the relative versioned disk basename and display
+The build reads the fixed-name [VM templates](disk_config/virtualization/) without
+editing them. Generated VMX/VBOX filenames use the VMDK's versioned basename.
+Generated VMX copies reference that relative disk filename and display
 `ControlThings Platform` for latest or `UPPERCASE_BRANCH - ControlThings Platform`
 for branch channels. Generated VBOX copies use the same basename, the VMDK's
 `ddb.uuid.image` in both disk references, and a fresh machine UUID per build. If
@@ -685,7 +700,8 @@ Packaging also stages the source disk with a temporary hard link. Partial archiv
 packaging failure. Disk and bundle checksums and source metadata are emitted
 after successful packaging; `artifact_bytes` describes the disk, while
 `bundle_filename`/`bundle_bytes` describe the download. Local output retains the
-unpacked VMDK for inspection.
+unpacked VMDK for inspection. Branch builds also retain the standalone VBOX and
+its checksum; source metadata records its name in `vbox_filename`.
 
 Run `python3 tests/check_build_disk.py`, `python3 tests/check_disk_payload_reuse.py`,
 `python3 tests/check_vmdk.py`, `python3 tests/check_osbuild_runner.py`, and

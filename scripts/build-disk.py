@@ -18,6 +18,8 @@ tool manifest come from the selected digest; app versions resolve at disk-build
 time. image-builder uses local storage, and future updates follow the original
 published OS channel. Assembly failures leave the retained payload available;
 final disk artifacts are uploaded only after successful assembly.
+In Actions, the build command emits filename and any standalone vbox_filename
+through GITHUB_OUTPUT so direct uploads can replace the matching artifact on retry.
 """
 
 import argparse
@@ -427,10 +429,11 @@ def vmdk_media_uuid(artifact: Path) -> str:
 def vm_configurations(artifact: Path, channel: str) -> dict[str, bytes]:
     """Render approved substitutions in copies of the repository VM templates.
 
-    Latest bundles include VBOX with matching media references and a new machine
-    UUID per build. Branch bundles include only VMX. Preserve all other template
-    content, including line endings, and reject missing/ambiguous target fields.
-    May initialize the disk's media UUID; must run before hashing or packaging.
+    Return VMX and VBOX bytes keyed by basenames matching the supplied VMDK's
+    stem, for every channel. VBOX uses matching media references and a new machine
+    UUID per call; the caller selects which configs to bundle. Preserve all other
+    template content, including line endings, and reject missing/ambiguous target
+    fields. May initialize the disk's media UUID; run before hashing or packaging.
     """
     templates = Path(__file__).resolve().parents[1] / "disk_config/virtualization"
     display = "ControlThings Platform"
@@ -442,36 +445,35 @@ def vm_configurations(artifact: Path, channel: str) -> dict[str, bytes]:
                              lambda _: f'{key} = "{value}"', vmx)
         if count != 1:
             raise ValueError(f"Expected one VMX {key} field")
-    configs = {"controlthingsplatform.vmx": vmx.encode("utf-8")}
-    if channel == "latest":
-        vbox = (templates / "controlthingsplatform.vbox").read_bytes().decode("utf-8")
-        root = ET.fromstring(vbox)
-        ns = {"v": "http://www.virtualbox.org/"}
-        paths = ("v:Machine", "v:Machine/v:MediaRegistry/v:HardDisks/v:HardDisk",
-                 "v:Machine/v:Hardware/v:StorageControllers/v:StorageController/v:AttachedDevice/v:Image")
-        nodes = [root.findall(path, ns) for path in paths]
-        if any(len(found) != 1 for found in nodes):
-            raise ValueError("Expected one VBOX machine, disk and attached image")
-        machine, hard_disk, attached = [found[0] for found in nodes]
-        if hard_disk.get("uuid") != attached.get("uuid"):
-            raise ValueError("VBOX template disk UUIDs disagree")
-        media = "{" + vmdk_media_uuid(artifact) + "}"
-        replacements = (
-            (f'<Machine uuid="{machine.attrib["uuid"]}"', f'<Machine uuid="{{{uuid.uuid4()}}}"', 1),
-            (f'uuid="{hard_disk.attrib["uuid"]}"', f'uuid="{media}"', 2),
-            (f'location="{hard_disk.attrib["location"]}"', f'location="{artifact.name}"', 1),
-        )
-        for old, new, expected in replacements:
-            if vbox.count(old) != expected:
-                raise ValueError("Ambiguous VBOX template substitution")
-            vbox = vbox.replace(old, new)
-        ET.fromstring(vbox)
-        configs["controlthingsplatform.vbox"] = vbox.encode("utf-8")
+    configs = {artifact.with_suffix(".vmx").name: vmx.encode("utf-8")}
+    vbox = (templates / "controlthingsplatform.vbox").read_bytes().decode("utf-8")
+    root = ET.fromstring(vbox)
+    ns = {"v": "http://www.virtualbox.org/"}
+    paths = ("v:Machine", "v:Machine/v:MediaRegistry/v:HardDisks/v:HardDisk",
+             "v:Machine/v:Hardware/v:StorageControllers/v:StorageController/v:AttachedDevice/v:Image")
+    nodes = [root.findall(path, ns) for path in paths]
+    if any(len(found) != 1 for found in nodes):
+        raise ValueError("Expected one VBOX machine, disk and attached image")
+    machine, hard_disk, attached = [found[0] for found in nodes]
+    if hard_disk.get("uuid") != attached.get("uuid"):
+        raise ValueError("VBOX template disk UUIDs disagree")
+    media = "{" + vmdk_media_uuid(artifact) + "}"
+    replacements = (
+        (f'<Machine uuid="{machine.attrib["uuid"]}"', f'<Machine uuid="{{{uuid.uuid4()}}}"', 1),
+        (f'uuid="{hard_disk.attrib["uuid"]}"', f'uuid="{media}"', 2),
+        (f'location="{hard_disk.attrib["location"]}"', f'location="{artifact.name}"', 1),
+    )
+    for old, new, expected in replacements:
+        if vbox.count(old) != expected:
+            raise ValueError("Ambiguous VBOX template substitution")
+        vbox = vbox.replace(old, new)
+    ET.fromstring(vbox)
+    configs[artifact.with_suffix(".vbox").name] = vbox.encode("utf-8")
     return configs
 
 
 def workflow_suffix(metadata: dict[str, str]) -> str:
-    """Return a validated run/attempt filename suffix, or empty for local builds."""
+    """Return the archive's run/attempt suffix, or empty for local builds."""
     if not metadata.get("workflow_run"):
         return ""
     suffix = f'-{metadata["workflow_run"]}-{metadata["workflow_attempt"]}'
@@ -493,8 +495,11 @@ def sevenzip_command() -> str:
 
 
 def package_vmdk(artifact: Path, metadata: dict[str, str]) -> Path:
-    """Create a 7z/LZMA2 bundle with only the disk and selected VM configs.
+    """Create a VM bundle and, for branches, a standalone versioned VBOX.
 
+    Latest bundles contain VMDK/VMX/VBOX; branch bundles contain VMDK/VMX.
+    Branch builds retain VBOX beside the archive for a separate download only
+    after compression succeeds. All config basenames match the VMDK's stem.
     Use level 5, a 32 MiB dictionary and two threads to bound compression costs.
     Disable solid mode so configurations can be extracted independently of the
     large disk. Hard-link the disk into a temporary sibling directory to archive
@@ -504,7 +509,12 @@ def package_vmdk(artifact: Path, metadata: dict[str, str]) -> Path:
     Return the completed archive path after atomically moving it into place.
     """
     compressor = sevenzip_command()
-    configs = vm_configurations(artifact, channel_for(metadata["source_tag"]))
+    channel = channel_for(metadata["source_tag"])
+    configs = vm_configurations(artifact, channel)
+    vbox = artifact.with_suffix(".vbox")
+    members = [artifact.name, artifact.with_suffix(".vmx").name]
+    if channel == "latest":
+        members.append(vbox.name)
     suffix = workflow_suffix(metadata)
     bundle = artifact.with_name(f"{artifact.stem}-vmdk{suffix}.7z")
     with tempfile.TemporaryDirectory(prefix=".bundle-", dir=artifact.parent) as temporary:
@@ -514,7 +524,9 @@ def package_vmdk(artifact: Path, metadata: dict[str, str]) -> Path:
             (Path(temporary) / name).write_bytes(content)
         subprocess.run([compressor, "a", "-t7z", "-m0=lzma2", "-mx=5", "-md=32m",
                         "-mmt=2", "-ms=off", str(partial.resolve()), "--",
-                        artifact.name, *configs], cwd=temporary, check=True)
+                        *members], cwd=temporary, check=True)
+        if channel != "latest":
+            (Path(temporary) / vbox.name).replace(vbox)
         partial.replace(bundle)
     return bundle
 
@@ -538,6 +550,8 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
     No application installers run when consuming a retained payload. VMDK uses
     a customized manifest in the same pinned builder, exports only the VMDK
     pipeline, and bundles VM configurations before checksums/metadata are emitted.
+    VMX/VBOX and QCOW2 use the VMDK naming pattern. Branch VMDK builds also emit
+    a standalone VBOX with a checksum and a vbox_filename source-metadata field.
     The runner hard-links the completed disk out of a disposable store on the
     output filesystem and removes that store before packaging. Host qemu-img
     validates the result; there is no second disk conversion.
@@ -561,9 +575,6 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
     # Current ControlThings bundles use the standard name without a smoke suffix.
     if tools.get("profile") == "smoke":
         name += "-smoke"
-    # Direct GitHub uploads use the disk basename as the artifact name.
-    if kind == "qcow2":
-        name += workflow_suffix(metadata)
     extra = []
     if kind == "iso":
         image_type, bootc_ref = "bootc-generic-iso", "localhost/controlthings-installer:build"
@@ -613,6 +624,10 @@ def build(metadata: dict[str, str], kind: str, output: Path) -> None:
         write_checksum(bundle)
         format_metadata = {"vmdk_subformat": "monolithicSparse",
                            "bundle_filename": bundle.name, "bundle_bytes": bundle.stat().st_size}
+        if channel_for(metadata["source_tag"]) != "latest":
+            vbox = artifact.with_suffix(".vbox")
+            write_checksum(vbox)
+            format_metadata["vbox_filename"] = vbox.name
     write_checksum(artifact)
     (output / f"{name}.source.json").write_text(
         json.dumps({**metadata, **format_metadata, "format": kind, "filename": artifact.name,
@@ -668,6 +683,13 @@ def main() -> None:
         metadata = json.loads(args.metadata.read_text())
         if args.command == "build":
             build(metadata, args.kind, args.output)
+            if "GITHUB_OUTPUT" in os.environ:
+                source, = args.output.glob("*.source.json")
+                result = json.loads(source.read_text())
+                with open(os.environ["GITHUB_OUTPUT"], "a") as stream:
+                    for key in ("filename", "vbox_filename"):
+                        if key in result:
+                            stream.write(f"{key}={result[key]}\n")
         elif args.command == "preflight":
             preflight(metadata, args.kind)
         else:

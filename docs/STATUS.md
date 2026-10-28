@@ -8,11 +8,33 @@ and `DECISIONS.md`, not these shared files.
 
 ## Current work
 
+- Implemented consistent VM download naming on 2026-10-28: VMDK, generated
+  VMX/VBOX and QCOW2 use the source channel/date/hash/architecture basename.
+  Latest-channel bundles contain VMDK/VMX/VBOX only; branch bundles contain
+  VMDK/VMX with a separate direct VBOX download and checksum. Source metadata
+  records the branch VBOX filename; optional S3 uploads include it. QCOW2 remains
+  a separate direct download, now without a CI run/attempt filename suffix.
+  Direct QCOW2/VBOX retries replace the matching artifact within the same run,
+  using the actual filename emitted by the CLI. Archive names retain their
+  run/attempt suffix. Source templates are unchanged.
+  See [build/download guidance](../DEVELOPMENT.md#building-disk-images) and the
+  [accepted revision](DECISIONS.md#disk-workflow-and-update-channels--2026-10-15).
+  Passed `tests/check_build_disk.py`, `tests/check_disk_payload_reuse.py` and
+  `tests/check_vmdk.py` using system Python, plus documentation/link and whitespace
+  review. Checks cover CI/local filenames, latest and both branch spellings,
+  AMD64/ARM64 QCOW2, real local OSBuild QEMU-stage small-disk creation and 7z
+  integrity/extraction, media/machine UUIDs, template-byte preservation, checksums,
+  CLI filename outputs, GitHub upload routing/retry configuration, mocked S3
+  filters, workflow shell syntax and failure cleanup. Container/registry commands
+  are mocked; full image builds, remote uploads and guest opening of the renamed
+  configurations remain unvalidated. Next: build latest/branch VMDK and QCOW2
+  artifacts and verify downloads and guests.
+
 - Serial-group and first-boot retry port to main on 2026-10-28: `dialout` support
-  is committed as `283f23f`; the final `56b0305` retry patch is applied, awaiting
-  cherry-pick continuation. Setup version 2 adds `wireshark`, `usbmon` and `dialout`
-  to current wheel administrators and supports explicit manual setup, preserving
-  memberships and vendor GIDs. An empty wheel group now exits 75 without a marker,
+  and first-boot retries are committed as `283f23f` and `7531cb2`. Setup version 2
+  adds `wireshark`, `usbmon` and `dialout` to current wheel administrators and
+  supports explicit manual setup, preserving memberships and vendor GIDs. An empty
+  wheel group now exits 75 without a marker,
   activating the service's existing 30-second retries during the same boot.
   Course-only docs are excluded; shared
   [guidance](../DEVELOPMENT.md#controlthings-capture-groups) and
@@ -21,10 +43,10 @@ and `DECISIONS.md`, not these shared files.
   repeat/manual setup, initial empty-wheel failure followed by administrator
   creation and successful retry, failure handling and service restart policy.
   Bash syntax, recipe formatting, documentation links and whitespace checks
-  passed; pkexec is mocked and host accounts were untouched. Next: finish the
-  cherry-pick and validate fresh/upgrade boots, effective login groups and serial
-  access. Inspect the guest service journal/marker; if setup completes after
-  login, log out/back in. No image build, remote CI or guest test was run.
+  passed; pkexec is mocked and host accounts were untouched. Next: validate
+  fresh/upgrade boots, effective login groups and serial access. Inspect the guest
+  service journal/marker; if setup completes after login, log out/back in.
+  No image build, remote CI or guest test was run.
 
 - Ported the Chunkah pull retry code from `19b2528` and `aea1ab8` to main on
   2026-10-28, committed as `018be34` and `d17afd0` respectively.
@@ -36,8 +58,8 @@ and `DECISIONS.md`, not these shared files.
   and workflow-tag regressions, Just formatting, shell syntax and whitespace
   checks passed. The rechunk fixture checks real host Podman CLI parsing; image
   operations and waits are mocked. No image build or remote CI was run during
-  this port. Next: complete the queued cherry-picks and validate container CI,
-  repacking, publication and signing. See [build details](../DEVELOPMENT.md#rechunking)
+  this port. Next: validate container CI, repacking, publication and signing.
+  See [build details](../DEVELOPMENT.md#rechunking)
   and [decision](DECISIONS.md#chunkah-rechunking--2026-10-15).
 
 - Implemented shared uv tools on 2026-10-22 (committed as `8fdc7a5`): ctmodbus,
@@ -130,9 +152,10 @@ and `DECISIONS.md`, not these shared files.
   VMDK/VMX/VBOX; branch bundles contain VMDK/VMX. The same `.7z` uploads directly
   to GitHub and S3, with disk/bundle checksums and JSON metadata kept separate.
   QCOW2 uploads directly to GitHub; checksums, manifest and source metadata move
-  into a separate metadata ZIP. CI QCOW2 filenames include run/attempt for unique
-  direct artifact names. QCOW2 S3 layout and ISO packaging are unchanged. No format
-  option was added. README and VM source templates are untouched.
+  into a separate metadata ZIP. The original CI QCOW2 run/attempt filename suffix
+  is superseded by the naming revision above. QCOW2 S3 layout and ISO packaging
+  are unchanged. No format option was added. README and VM source templates are
+  untouched.
   Passed `tests/check_vmdk.py`, `tests/check_build_disk.py` and
   `tests/check_disk_payload_reuse.py`: real local OSBuild QEMU-stage disk assembly,
   content/write support, UUID/configuration preservation, 7z integrity/extraction,

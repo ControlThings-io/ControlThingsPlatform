@@ -21,7 +21,7 @@ on:
         default: false
         type: boolean
       vmdk:
-        description: "Build VMware bundle; latest also includes VirtualBox (amd64 only)"
+        description: "Build VMware bundle; latest bundles VBOX, branches download it separately (amd64 only)"
         default: false
         type: boolean
       image_tag:
@@ -193,6 +193,7 @@ jobs:
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: printf '%s' "$REGISTRY_TOKEN" | sudo podman login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
       - name: Assemble retained payload and checksum
+        id: assembly
         env:
           DISK_FORMAT: ${{ matrix.format }}
         run: python3 scripts/build-disk.py build disk-input/prepared.json "$DISK_FORMAT" output
@@ -208,8 +209,10 @@ jobs:
         if: matrix.format == 'qcow2'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          name: ${{ steps.assembly.outputs.filename }}
           path: output/*.qcow2
           archive: false
+          overwrite: true
           if-no-files-found: error
       - name: Upload compressed VM bundle
         if: matrix.format == 'vmdk'
@@ -217,6 +220,15 @@ jobs:
         with:
           path: output/*.7z
           archive: false
+          if-no-files-found: error
+      - name: Upload VirtualBox configuration directly
+        if: matrix.format == 'vmdk' && !startsWith(needs.resolve.outputs.source_tag, 'latest-')
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.assembly.outputs.vbox_filename }}
+          path: output/*.vbox
+          archive: false
+          overwrite: true
           if-no-files-found: error
       - name: Upload disk checksums, manifest, and source metadata
         if: matrix.format != 'iso'
@@ -245,7 +257,7 @@ jobs:
           sudo apt-get install -y rclone
           filters=()
           if [[ "$DISK_FORMAT" == vmdk ]]; then
-            filters=(--include '*.7z' --include '*.json' --include '*.sha256')
+            filters=(--include '*.7z' --include '*.vbox' --include '*.json' --include '*.sha256')
           fi
           rclone copy output/ "S3:${S3_BUCKET}/${SOURCE_TAG}/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/${TARGET_ARCH}/${DISK_FORMAT}/" "${filters[@]}"
       - name: Log out of payload registry

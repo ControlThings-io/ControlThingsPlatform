@@ -135,6 +135,8 @@ with tempfile.TemporaryDirectory(prefix='ct-payload-reuse-') as temporary:
             assert saved['vmdk_subformat'] == 'monolithicSparse'
             assert not any(cmd[:2] == ('qemu-img', 'convert') for cmd in calls)
             assert (output / saved['bundle_filename']).is_file()
+            assert 'vbox_filename' not in saved  # Retained fixture uses latest.
+            assert not list(output.glob('*.vbox'))
         assert '-smoke' in saved['filename']
         # Every retained-assembly command failure aborts; no package fallback.
         for index in range(len(calls)):

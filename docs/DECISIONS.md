@@ -212,11 +212,11 @@ registry metadata checks do not establish installer build or boot compatibility.
 Mirroring the installer base into a controlled registry remains a proposal;
 no mirror or automatic pin refresh is implemented.
 
-Latest-channel bundles include exactly the versioned VMDK plus the fixed names
-`controlthingsplatform.vmx` and `controlthingsplatform.vbox`; branch bundles omit
-VBOX. Dated source tags follow their originating channel. Generate configuration
-copies from the supplied templates, preserving all settings except the approved
-fields: VMX display name/disk basename; VBOX disk basename, matching media UUIDs
+Latest-channel bundles include the versioned VMDK, VMX and VBOX; branch bundles
+omit VBOX. The naming/download revision below supersedes the original fixed
+VMX/VBOX filenames. Dated source tags follow their originating channel. Generate
+configuration copies from the supplied templates, preserving all settings except
+the approved fields: VMX display name/disk basename; VBOX disk basename, matching media UUIDs
 and a fresh machine UUID per build. VMX display names are `ControlThings Platform`
 for latest and `UPPERCASE_BRANCH - ControlThings Platform` otherwise. Initialize
 VirtualBox's `ddb.uuid.image` in reserved VMDK descriptor space if absent, before
@@ -243,12 +243,28 @@ collisions. Checksums describe final bytes after media UUID initialization.
 
 QCOW2 uploads directly to GitHub with `archive: false`; move its checksums,
 provenance and manifest into a separate metadata ZIP. This removes the existing
-uncompressed ZIP wrapper without adding a compression step to the disk. Append
-the run/attempt to CI QCOW2 filenames because direct artifact names come from
-the uploaded filename. Local QCOW2 names and S3's individual-file layout remain.
+uncompressed ZIP wrapper without adding a compression step to the disk. The
+initial CI QCOW2 run/attempt suffix is superseded by the naming revision below.
+S3's individual-file layout remains.
 ISO packaging remains unchanged. This supersedes the earlier VMDK ZIP decision
 and combined QCOW2 image/metadata artifact. See
 [packaging details](../DEVELOPMENT.md#building-disk-images).
+
+Accepted naming and download revision — 2026-10-28: VMDK, generated VMX/VBOX and
+QCOW2 share the `<image>-<channel>-YYYYMMDD-HASH-<architecture>` basename, using
+the source container version label for date/hash. Repository template filenames
+remain fixed. This replaces fixed output VMX/VBOX names and removes the CI-only
+run/attempt suffix from QCOW2; 7z bundle names retain their CI run/attempt suffix.
+Latest-channel VBOX is bundled with VMDK/VMX only. Branch bundles contain VMDK/VMX;
+each branch VMDK build also emits a matching standalone VBOX as a direct GitHub
+download and optional S3 object, with its own checksum in the metadata download.
+Initialize the media UUID before disk hashing on every channel, and generate a
+fresh machine UUID for each VBOX. Users place a separate VBOX beside the extracted
+VMDK. QCOW2 remains a separate direct download. The selected source channel,
+including dated tags, controls this behavior independently of checkout branch.
+Direct QCOW2 and branch VBOX retries replace the same-named artifact within that
+workflow run. Supply the actual generated filename to the upload action's
+`overwrite` path; separate workflow runs keep their own downloads.
 
 Resolve the source once. Derive filename date/hash from its version label and
 record actual digests because same-day tags may be reused and revision labels

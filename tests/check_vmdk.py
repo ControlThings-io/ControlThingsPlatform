@@ -1,4 +1,4 @@
-"""Check direct VMDK output, media UUIDs and compressed VM bundles.
+"""Check VMDK output, versioned configs, standalone VBOX and VM bundles.
 
 Run from the repository root with python3 tests/check_vmdk.py. Requires qemu-img,
 qemu-io and 7zz or 7z. Uses a real local OSBuild QEMU stage when installed, otherwise QEMU
@@ -137,6 +137,18 @@ with tempfile.TemporaryDirectory(prefix='ct-vmdk-') as temporary:
     subprocess.run(['qemu-img', 'compare', '-f', 'raw', '-F', 'vmdk',
                     str(raw), str(artifact)], check=True)
 
+    # A branch's separately downloaded VBOX must work with a disk that has never
+    # been packaged for VirtualBox, including initialization before checksums.
+    branch_disk = root / 'branch-first.vmdk'
+    branch_disk.write_bytes(original_disk)
+    branch_configs = disk.vm_configurations(branch_disk, 'ics410_l01')
+    branch_vbox = ET.fromstring(branch_configs['branch-first.vbox'])
+    branch_media = branch_vbox.find('v:Machine/v:MediaRegistry/v:HardDisks/v:HardDisk', ns)
+    branch_bytes = branch_disk.read_bytes()
+    assert branch_media.get('uuid') == '{' + disk.vmdk_media_uuid(branch_disk) + '}'
+    assert branch_disk.read_bytes() == branch_bytes != original_disk
+    branch_disk.unlink()
+
     machine_ids = set()
     for channel in ('latest', 'latest', 'ics410_l01', 'ics410-l01'):
         metadata = {'source_tag': f'{channel}-20261020-abcdef0',
@@ -151,12 +163,14 @@ with tempfile.TemporaryDirectory(prefix='ct-vmdk-') as temporary:
             subprocess.run([disk.sevenzip_command(), 'x', str(bundle), f'-o{extracted}'],
                            check=True, stdout=subprocess.DEVNULL)
             members = Path(extracted)
-            expected = {artifact.name, 'controlthingsplatform.vmx'}
+            vmx_name = artifact.with_suffix('.vmx').name
+            vbox_name = artifact.with_suffix('.vbox').name
+            expected = {artifact.name, vmx_name}
             if channel == 'latest':
-                expected.add('controlthingsplatform.vbox')
+                expected.add(vbox_name)
             assert {p.name for p in members.iterdir()} == expected
             assert (members / artifact.name).read_bytes() == artifact.read_bytes()
-            vmx = (members / 'controlthingsplatform.vmx').read_bytes().decode()
+            vmx = (members / vmx_name).read_bytes().decode()
             display = ('ControlThings Platform' if channel == 'latest' else
                        f'{channel.upper()} - ControlThings Platform')
             assert f'displayName = "{display}"' in vmx
@@ -168,24 +182,27 @@ with tempfile.TemporaryDirectory(prefix='ct-vmdk-') as temporary:
                                                f'displayName = "{display}"').replace(
                 'nvme0:0.fileName = "controlthingsplatform.vmdk"', f'nvme0:0.fileName = "{artifact.name}"')
             if channel == 'latest':
-                vbox_bytes = (members / 'controlthingsplatform.vbox').read_bytes()
-                vbox = ET.fromstring(vbox_bytes)
-                machine = vbox.find('v:Machine', ns)
-                machine_id = machine.get('uuid')
-                assert machine_id not in machine_ids
-                machine_ids.add(machine_id)
-                hard_disk = machine.find('v:MediaRegistry/v:HardDisks/v:HardDisk', ns)
-                attached = machine.find('.//v:AttachedDevice/v:Image', ns)
-                assert hard_disk.get('uuid') == attached.get('uuid') == '{' + media_uuid + '}'
-                assert hard_disk.get('location') == artifact.name
-                old = ET.fromstring(templates_before['controlthingsplatform.vbox'])
-                old_machine = old.find('v:Machine', ns)
-                old_disk = old_machine.find('v:MediaRegistry/v:HardDisks/v:HardDisk', ns)
-                expected_vbox = templates_before['controlthingsplatform.vbox'].decode().replace(
-                    f'<Machine uuid="{old_machine.get("uuid")}"', f'<Machine uuid="{machine_id}"').replace(
-                    f'uuid="{old_disk.get("uuid")}"', f'uuid="{{{media_uuid}}}"').replace(
-                    'location="controlthingsplatform.vmdk"', f'location="{artifact.name}"')
-                assert vbox_bytes == expected_vbox.encode()
+                vbox_bytes = (members / vbox_name).read_bytes()
+                assert not artifact.with_suffix('.vbox').exists()
+            else:
+                vbox_bytes = artifact.with_suffix('.vbox').read_bytes()
+            vbox = ET.fromstring(vbox_bytes)
+            machine = vbox.find('v:Machine', ns)
+            machine_id = machine.get('uuid')
+            assert machine_id not in machine_ids
+            machine_ids.add(machine_id)
+            hard_disk = machine.find('v:MediaRegistry/v:HardDisks/v:HardDisk', ns)
+            attached = machine.find('.//v:AttachedDevice/v:Image', ns)
+            assert hard_disk.get('uuid') == attached.get('uuid') == '{' + media_uuid + '}'
+            assert hard_disk.get('location') == artifact.name
+            old = ET.fromstring(templates_before['controlthingsplatform.vbox'])
+            old_machine = old.find('v:Machine', ns)
+            old_disk = old_machine.find('v:MediaRegistry/v:HardDisks/v:HardDisk', ns)
+            expected_vbox = templates_before['controlthingsplatform.vbox'].decode().replace(
+                f'<Machine uuid="{old_machine.get("uuid")}"', f'<Machine uuid="{machine_id}"').replace(
+                f'uuid="{old_disk.get("uuid")}"', f'uuid="{{{media_uuid}}}"').replace(
+                'location="controlthingsplatform.vmdk"', f'location="{artifact.name}"')
+            assert vbox_bytes == expected_vbox.encode()
         assert bundle.stat().st_size < artifact.stat().st_size
         disk.write_checksum(artifact)
         disk.write_checksum(bundle)
@@ -193,23 +210,27 @@ with tempfile.TemporaryDirectory(prefix='ct-vmdk-') as temporary:
             assert path.with_name(path.name + '.sha256').read_text() == (
                 hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + path.name + '\n')
         bundle.unlink()
+        if channel != 'latest':
+            artifact.with_suffix('.vbox').unlink()
     # Missing tools and compression failures must leave no publishable archive,
     # temporary directory or staged hard-link; the source disk remains intact.
-    for error in (FileNotFoundError('7zz'), subprocess.CalledProcessError(2, ['7zz'])):
-        def failed_compression(args, **kwargs):
-            Path(args[args.index('--') - 1]).write_bytes(b'partial archive')
-            raise error
+    for channel in ('latest', 'ics410_l01'):
+        for error in (FileNotFoundError('7zz'), subprocess.CalledProcessError(2, ['7zz'])):
+            def failed_compression(args, **kwargs):
+                Path(args[args.index('--') - 1]).write_bytes(b'partial archive')
+                raise error
 
-        with patch.object(disk.subprocess, 'run', side_effect=failed_compression):
-            try:
-                disk.package_vmdk(artifact, {'source_tag': 'latest'})
-            except (FileNotFoundError, subprocess.CalledProcessError):
-                pass
-            else:
-                raise AssertionError('Ignored packaging failure')
-        assert not list(root.glob('*.7z')) and not list(root.glob('.bundle-*'))
-        assert artifact.read_bytes() == after_uuid
-        assert artifact.stat().st_nlink == 1
+            with patch.object(disk.subprocess, 'run', side_effect=failed_compression):
+                try:
+                    disk.package_vmdk(artifact, {'source_tag': channel})
+                except (FileNotFoundError, subprocess.CalledProcessError):
+                    pass
+                else:
+                    raise AssertionError('Ignored packaging failure')
+            assert not list(root.glob('*.7z')) and not list(root.glob('.bundle-*'))
+            assert not list(root.glob('*.vbox'))
+            assert artifact.read_bytes() == after_uuid
+            assert artifact.stat().st_nlink == 1
 
     # Descriptor validation rejects malformed bounds/data without changing bytes.
     for mode in ('magic', 'bounds', 'padding', 'duplicate', 'invalid-uuid', 'full'):
@@ -239,4 +260,5 @@ with tempfile.TemporaryDirectory(prefix='ct-vmdk-') as temporary:
                     str(artifact)], check=True)
 
 assert templates_before == {p.name: p.read_bytes() for p in template_dir.iterdir()}
-print('PASS direct VMDK format/content/write, UUID preservation, channel bundles, checksums and failures')
+print('PASS direct VMDK format/content/write, UUID preservation, versioned channel bundles,')
+print('     branch-only standalone VBOX, checksums and failure cleanup')

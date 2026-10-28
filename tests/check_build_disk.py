@@ -164,21 +164,28 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                         (output / f"{basename}.{kind}").write_bytes(b"fixture disk contents")
                     return ""
 
-                with patch.object(disk, "run", side_effect=command):
-                    disk.build(metadata, kind, output)
+                metadata_path = output.with_suffix('.json')
+                metadata_path.write_text(json.dumps(metadata))
+                download_outputs = output.with_suffix('.outputs')
+                with patch.object(disk, "run", side_effect=command), \
+                     patch.dict(os.environ, GITHUB_OUTPUT=str(download_outputs)), \
+                     patch.object(sys, "argv", ['build-disk.py', 'build', str(metadata_path),
+                                                kind, str(output)]):
+                    disk.main()
                 if kind == "iso":
                     iso_command_count = len(commands)
                 name = f"controlthingsplatform-{channel}-20261015-5118339-{architecture}"
                 if kind == "iso":
                     name += "-installer"
-                elif kind == "qcow2":
-                    name += "-12345-2"
                 artifact = output / f"{name}.{kind}"
                 assert artifact.exists()
                 assert artifact.with_suffix(artifact.suffix + ".sha256").read_text() == (
                     f'{hashlib.sha256(artifact.read_bytes()).hexdigest()}  {artifact.name}\n'
                 )
                 saved = json.loads((output / f"{name}.source.json").read_text())
+                assert dict(line.split('=', 1) for line in download_outputs.read_text().splitlines()) == {
+                    key: saved[key] for key in ('filename', 'vbox_filename') if key in saved
+                }
                 assert saved["format"] == kind
                 assert saved["artifact_bytes"] == artifact.stat().st_size
                 assert not any(cmd[:2] == ("qemu-img", "convert") for cmd in commands)
@@ -188,6 +195,17 @@ with tempfile.TemporaryDirectory(prefix="ct-disk-tests-") as temporary:
                     assert str(Path('scripts/export-vmdk.py').resolve()) + ':/run-ct-export.py:ro' in runner
                     assert saved["bundle_filename"].endswith(".7z")
                     assert (output / saved["bundle_filename"]).is_file()
+                    vbox = output / f"{name}.vbox"
+                    if channel == "latest":
+                        assert "vbox_filename" not in saved
+                        assert not vbox.exists()
+                        assert not vbox.with_suffix(".vbox.sha256").exists()
+                    else:
+                        assert saved["vbox_filename"] == vbox.name
+                        assert vbox.is_file()
+                        assert vbox.with_suffix(".vbox.sha256").read_text() == (
+                            f'{hashlib.sha256(vbox.read_bytes()).hexdigest()}  {vbox.name}\n'
+                        )
                     assert not list(output.glob(".bundle-*"))
                 else:
                     assert "vmdk_subformat" not in saved
@@ -352,16 +370,27 @@ for job_name, dependency in (("prepare", "resolve"), ("build", "prepare")):
 assembly = next(step for step in workflow["jobs"]["build"]["steps"]
                 if step["name"] == "Assemble retained payload and checksum")
 assert "build disk-input/prepared.json" in assembly["run"]
+assert assembly['id'] == 'assembly'
 
 uploads = [step for step in workflow['jobs']['build']['steps']
            if step.get('uses', '').startswith('actions/upload-artifact@')]
-assert len(uploads) == 4
+assert len(uploads) == 5
 bundle_upload = next(step for step in uploads if step['with']['path'] == 'output/*.7z')
 assert bundle_upload['with']['archive'] is False
 assert bundle_upload['if'] == "matrix.format == 'vmdk'"
 qcow_upload = next(step for step in uploads if step['with']['path'] == 'output/*.qcow2')
 assert qcow_upload['if'] == "matrix.format == 'qcow2'"
 assert qcow_upload['with']['archive'] is False
+assert qcow_upload['with']['overwrite'] is True
+assert qcow_upload['with']['name'] == '${{ steps.assembly.outputs.filename }}'
+vbox_upload = next(step for step in uploads if step['with']['path'] == 'output/*.vbox')
+assert vbox_upload['if'] == (
+    "matrix.format == 'vmdk' && !startsWith(needs.resolve.outputs.source_tag, 'latest-')"
+)
+assert vbox_upload['with']['archive'] is False
+assert vbox_upload['with']['overwrite'] is True
+assert vbox_upload['with']['name'] == '${{ steps.assembly.outputs.vbox_filename }}'
+assert vbox_upload['with']['if-no-files-found'] == 'error'
 metadata_upload = next(step for step in uploads if 'metadata-' in step['with'].get('name', ''))
 assert metadata_upload['with']['path'].splitlines() == ['output/*.json', 'output/*.sha256']
 assert metadata_upload['if'] == "matrix.format != 'iso'"
@@ -391,7 +420,8 @@ with tempfile.TemporaryDirectory(prefix='ct-upload-') as temporary:
         subprocess.run(['bash', '-e', '-c', s3['run']], env=env, check=True)
         args = capture.read_text().splitlines()
         assert args[:3] == ['copy', 'output/', f'S3:fixture/latest-20261020-abcdef0/123-2/amd64/{kind}/']
-        assert args[3:] == (['--include', '*.7z', '--include', '*.json', '--include', '*.sha256']
+        assert args[3:] == (['--include', '*.7z', '--include', '*.vbox',
+                            '--include', '*.json', '--include', '*.sha256']
                             if kind == 'vmdk' else [])
 
 for job in workflow["jobs"].values():
