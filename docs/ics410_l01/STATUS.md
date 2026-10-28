@@ -1,24 +1,37 @@
 # ICS410 L01 current status
 
-## Serial device groups — 2026-10-27
+## Serial device groups — 2026-10-28
 
-- Added `dialout` alongside `wireshark` and `usbmon` for automatic setup of current
-  `wheel` members and explicit manual setup. Version 2 reapplies the policy to
+- Committed as `72644c7`: added `dialout` alongside `wireshark` and `usbmon` for
+  automatic setup of current `wheel` members and explicit manual setup.
+  Version 2 reapplies the policy to
   existing administrators after deployment; existing memberships and vendor GIDs
   are preserved. See [operation guidance](DEVELOPMENT.md#capture-and-serial-device-groups)
   and [decision](DECISIONS.md#serial-device-group-membership--2026-10-27).
-- Passed `python3 tests/check_controlthings_groups.py`: real isolated group tools
-  checked all wheel users, explicit non-administrator setup, preserved vendor
-  GIDs/memberships, version 1 migration, repeat runs, empty-wheel deferral and
-  failure handling; recipe delegation uses mocked pkexec. Bash syntax, Just
-  formatting, `systemd-analyze verify` and whitespace/link review passed.
-  Group-tool and systemd checks required execution outside the default sandbox
-  because it restricts audit/socket access; account mutations stayed inside
-  temporary Bubblewrap fixtures.
-- No image build, remote CI or guest/hardware validation performed. Next: verify
-  fresh-install and version 1 upgrade boots, effective login groups, KDE pkexec
-  and serial-device access in a guest. Propagation to main remains outstanding;
-  shared documentation is unchanged on this branch.
+- User guest report on 2026-10-28: the initial first-boot administrator did not
+  receive the expected membership automatically; `ujust controlthings-groups`
+  succeeded and membership persisted through reboots. Exact deployed image and
+  service logs were not supplied. Automatic setup is not yet validated.
+- Fixed the startup/account-creation race: empty `wheel` membership now exits 75
+  instead of success, activating the service's existing 30-second retries during
+  the same boot. No marker is written while waiting. This race is proven in code;
+  whether it caused the reported guest failure remains unconfirmed without logs.
+- Passed `python3 tests/check_controlthings_groups.py` on 2026-10-28: real isolated
+  group tools checked all wheel users, explicit non-administrator setup, preserved vendor
+  GIDs/memberships, version 1 migration, repeat runs, initial empty-wheel failure
+  followed by administrator creation and successful retry, and failure handling.
+  The new retry regression failed before the fix and passed afterward. Recipe
+  delegation uses mocked pkexec; service restart configuration, Bash syntax,
+  Just formatting and whitespace/link review passed. Account mutations stayed
+  inside temporary Bubblewrap fixtures, with execution outside the default
+  sandbox to permit the account tools' audit access. Earlier systemd unit
+  verification passed on 2026-10-27; the unit has not changed during this repair.
+- No new image build, remote CI or corrected guest/hardware validation performed.
+  Next: test a fresh first-boot administrator, inspect the service journal/marker
+  and use `id -nG USERNAME` to confirm stored membership. If setup finishes after
+  login, log out/back in and verify effective groups. Check version 1 upgrades and
+  serial-device access. Propagation to main remains outstanding; shared
+  documentation is unchanged on this branch.
 
 ## Current work — 2026-10-24
 

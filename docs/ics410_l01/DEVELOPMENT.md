@@ -9,17 +9,22 @@ course choices are in [DECISIONS.md](DECISIONS.md).
 
 On this branch, ControlThings group setup adds `dialout` alongside `wireshark`
 and `usbmon`. This supersedes the shared guide's delegation of serial-group
-setup to Aurora's DX tooling. The existing
-[startup and manual setup lifecycle](../../DEVELOPMENT.md#controlthings-capture-groups)
-still applies: automatic setup targets current `wheel` members; later accounts
-and non-administrators can use `ujust controlthings-groups`.
+setup to Aurora's DX tooling. Automatic setup targets current `wheel` members;
+later accounts and non-administrators can use `ujust controlthings-groups` as in
+the [shared setup guidance](../../DEVELOPMENT.md#controlthings-capture-groups).
+Unlike the shared guide's next-boot deferral, an empty `wheel` group exits with
+temporary failure (75), allowing the boot service to retry every 30 seconds
+until first-boot account creation completes. No success marker is written while
+waiting. This closes the race between service startup and administrator creation.
 
 Setup version 2 reapplies membership on the next boot after deploying the updated
 image, including systems with a successful version 1 marker. Existing memberships
-and group IDs are preserved. Log out completely and log back in after manual
-setup, then check `id -nG` for all three groups. See the
+and group IDs are preserved. Membership added after a login session starts takes
+effect after logging out completely and back in; this includes manual setup and
+automatic setup that completes after login. Check `id -nG` in the new session
+for all three groups. See the
 [decision](DECISIONS.md#serial-device-group-membership--2026-10-27) and
-[validation status](STATUS.md#serial-device-groups--2026-10-27).
+[validation status](STATUS.md#serial-device-groups--2026-10-28).
 
 ## ICS410 L01 workbook
 

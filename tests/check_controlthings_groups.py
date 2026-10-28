@@ -14,6 +14,10 @@ import tempfile
 
 script = Path("system_files/usr/libexec/controlthings-groups").resolve()
 recipe = Path("system_files/usr/share/ublue-os/just/60-custom.just").resolve()
+unit = Path("system_files/usr/lib/systemd/system/controlthings-groups.service").read_text()
+assert "Restart=on-failure\n" in unit
+assert "RestartSec=30\n" in unit
+assert "StartLimitIntervalSec=0\n" in unit
 assert script.stat().st_mode & 0o111
 for path in (script, Path("build_files/build.sh")):
     subprocess.run(["bash", "-n", str(path)], check=True)
@@ -30,11 +34,11 @@ with tempfile.TemporaryDirectory(prefix="ct-groups-tests-") as temporary:
         "charlie:x:1002:1002::/home/charlie:/bin/bash\n"
     )
     (etc / "group").write_text(
-        "root:x:0:\nwheel:x:10:alpha,bravo\n"
+        "root:x:0:\nwheel:x:10:\n"
         "alpha:x:1000:\nbravo:x:1001:\ncharlie:x:1002:\n"
     )
     (etc / "gshadow").write_text(
-        "root:!::\nwheel:!::alpha,bravo\nalpha:!::\nbravo:!::\ncharlie:!::\n"
+        "root:!::\nwheel:!::\nalpha:!::\nbravo:!::\ncharlie:!::\n"
     )
     (etc / "login.defs").write_text("SYS_GID_MIN 201\nSYS_GID_MAX 999\n")
     (etc / "nsswitch.conf").write_text(
@@ -63,8 +67,15 @@ with tempfile.TemporaryDirectory(prefix="ct-groups-tests-") as temporary:
     def groups(user):
         return set(sandbox("id", "-nG", user).stdout.split())
 
-    sandbox("/controlthings-groups")
     marker = etc / "ublue/controlthings-groups"
+    # First boot can reach the service before account setup adds administrators.
+    # A temporary failure must activate the unit's Restart=on-failure policy.
+    assert sandbox("/controlthings-groups", check=False).returncode == 75
+    assert not marker.exists()
+    for user in ("alpha", "bravo"):
+        assert groups(user) == {user}
+        sandbox("gpasswd", "--add", user, "wheel")
+    sandbox("/controlthings-groups")
     assert marker.read_text() == "2\n"
     for user in ("alpha", "bravo"):
         assert groups(user) == {user, "wheel", "wireshark", "usbmon", "dialout"}
@@ -87,7 +98,7 @@ with tempfile.TemporaryDirectory(prefix="ct-groups-tests-") as temporary:
 
     marker.unlink()
     (etc / "group").write_text(before.replace("wheel:x:10:alpha,bravo", "wheel:x:10:"))
-    sandbox("/controlthings-groups")
+    assert sandbox("/controlthings-groups", check=False).returncode == 75
     assert not marker.exists()
     (etc / "group").write_text(before.replace("wheel:x:10:alpha,bravo", "wheel:x:10:missing"))
     assert sandbox("/controlthings-groups", check=False).returncode != 0
@@ -119,4 +130,5 @@ with tempfile.TemporaryDirectory(prefix="ct-groups-tests-") as temporary:
     assert capture.read_text().splitlines() == ["/usr/libexec/controlthings-groups", "--user", username]
 
 print("PASS real group tools: all wheel users, manual user, preserved memberships/vendor GID,")
-print("     marker skip/upgrade, empty wheel retry, failure handling; ujust delegation and syntax")
+print("     marker skip/upgrade, first-boot retry after wheel creation, failure handling;")
+print("     ujust delegation, service restart policy and syntax")

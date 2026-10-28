@@ -137,3 +137,17 @@ This supersedes the [shared capture-group decision](../DECISIONS.md#controlthing
 to leave `dialout` exclusively to Aurora's DX tooling on this branch. Shared
 documentation remains aligned with main; propagation to main is outstanding.
 See [branch operation guidance](DEVELOPMENT.md#capture-and-serial-device-groups).
+
+### First-boot setup retry correction — 2026-10-28
+
+Implemented in response to the user's initial-administrator test: treat an empty
+`wheel` group as temporary failure (exit 75) so the existing service retries every
+30 seconds during the same boot. The previous successful empty-group exit left
+setup pending until a later boot; it could miss account creation after startup.
+This supersedes that deferral behavior while preserving setup version 2,
+administrator selection, success markers and explicit manual setup.
+
+The startup race is established in code and covered by the isolated regression;
+guest service logs were not supplied, so the cause of the reported guest failure
+is not independently confirmed. The user confirmed manual setup and membership
+persistence through reboots. Corrected automatic guest setup remains unvalidated.
