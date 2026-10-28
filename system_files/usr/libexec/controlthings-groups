@@ -1,13 +1,14 @@
 #!/bin/bash
-# Aurora-style group setup. Run as root with no arguments to add all current
-# wheel members once per GROUP_SETUP_VER; record success in /etc/ublue.
+# Aurora-style group setup for wireshark, usbmon and dialout. Run as root with no
+# arguments to add all current wheel members once per GROUP_SETUP_VER; record
+# success in /etc/ublue.
 # --user USER adds one local account regardless of the marker, without changing
 # it. Preserve existing memberships. Failures leave automatic setup retryable;
 # earlier successful additions may remain. Empty wheel membership writes no
 # marker, allowing setup after the initial administrator account is created.
 set -euo pipefail
 
-GROUP_SETUP_VER=1
+GROUP_SETUP_VER=2
 GROUP_SETUP_VER_FILE=/etc/ublue/controlthings-groups
 
 if (( EUID != 0 )); then
@@ -39,8 +40,8 @@ case "$#:${1:-}" in
 esac
 
 # Like Aurora, give vendor-only groups local entries so usermod can update them.
-# Wireshark normally supplies these groups; create them if not already present.
-for group in wireshark usbmon; do
+# Base packages normally supply these groups; create them if not already present.
+for group in wireshark usbmon dialout; do
     if ! grep -q "^${group}:" /etc/group; then
         if entry=$(getent group "$group"); then
             printf '%s\n' "$entry" >> /etc/group
@@ -51,8 +52,8 @@ for group in wireshark usbmon; do
 done
 
 for user in "${users[@]}"; do
-    usermod --append --groups wireshark,usbmon -- "$user"
-    echo "Added $user to wireshark and usbmon."
+    usermod --append --groups wireshark,usbmon,dialout -- "$user"
+    echo "Added $user to wireshark, usbmon and dialout."
 done
 
 if (( $# == 0 )); then

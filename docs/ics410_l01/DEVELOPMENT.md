@@ -5,6 +5,22 @@ Course-specific build and operation instructions for `ics410_l01`. Follow the
 Current validation and remaining checks are in [STATUS.md](STATUS.md); accepted
 course choices are in [DECISIONS.md](DECISIONS.md).
 
+## Capture and serial device groups
+
+On this branch, ControlThings group setup adds `dialout` alongside `wireshark`
+and `usbmon`. This supersedes the shared guide's delegation of serial-group
+setup to Aurora's DX tooling. The existing
+[startup and manual setup lifecycle](../../DEVELOPMENT.md#controlthings-capture-groups)
+still applies: automatic setup targets current `wheel` members; later accounts
+and non-administrators can use `ujust controlthings-groups`.
+
+Setup version 2 reapplies membership on the next boot after deploying the updated
+image, including systems with a successful version 1 marker. Existing memberships
+and group IDs are preserved. Log out completely and log back in after manual
+setup, then check `id -nG` for all three groups. See the
+[decision](DECISIONS.md#serial-device-group-membership--2026-10-27) and
+[validation status](STATUS.md#serial-device-groups--2026-10-27).
+
 ## ICS410 L01 workbook
 
 This course-branch feature serves the workbook at `http://localhost/` (IPv4

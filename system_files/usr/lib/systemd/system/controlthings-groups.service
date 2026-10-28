@@ -1,5 +1,5 @@
 [Unit]
-Description=Set up ControlThings packet capture groups
+Description=Set up ControlThings packet capture and serial device groups
 After=systemd-sysusers.service aurora-groups.service
 StartLimitIntervalSec=0
 

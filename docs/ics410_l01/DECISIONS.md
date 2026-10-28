@@ -123,3 +123,17 @@ Accepted: install the root-owned launcher directly at `/usr/bin/workbook-update`
 The former symlink to `/usr/libexec/ics410-workbook-update` provided no useful
 separation for this single entry point. Bash invocation and sudo authorization
 remain unchanged.
+
+## Serial device group membership — 2026-10-27
+
+Accepted by user direction: include `dialout` in ControlThings group setup for
+the same users receiving `wireshark` and `usbmon`. Apply this through the existing
+boot service and manual helper; increment the setup version from 1 to 2 so
+existing administrator accounts receive serial access after deployment too.
+Preserve existing memberships and vendor GIDs, with the existing retry/marker
+contract unchanged.
+
+This supersedes the [shared capture-group decision](../DECISIONS.md#controlthings-capture-groups--2026-10-15)
+to leave `dialout` exclusively to Aurora's DX tooling on this branch. Shared
+documentation remains aligned with main; propagation to main is outstanding.
+See [branch operation guidance](DEVELOPMENT.md#capture-and-serial-device-groups).

@@ -1,5 +1,25 @@
 # ICS410 L01 current status
 
+## Serial device groups — 2026-10-27
+
+- Added `dialout` alongside `wireshark` and `usbmon` for automatic setup of current
+  `wheel` members and explicit manual setup. Version 2 reapplies the policy to
+  existing administrators after deployment; existing memberships and vendor GIDs
+  are preserved. See [operation guidance](DEVELOPMENT.md#capture-and-serial-device-groups)
+  and [decision](DECISIONS.md#serial-device-group-membership--2026-10-27).
+- Passed `python3 tests/check_controlthings_groups.py`: real isolated group tools
+  checked all wheel users, explicit non-administrator setup, preserved vendor
+  GIDs/memberships, version 1 migration, repeat runs, empty-wheel deferral and
+  failure handling; recipe delegation uses mocked pkexec. Bash syntax, Just
+  formatting, `systemd-analyze verify` and whitespace/link review passed.
+  Group-tool and systemd checks required execution outside the default sandbox
+  because it restricts audit/socket access; account mutations stayed inside
+  temporary Bubblewrap fixtures.
+- No image build, remote CI or guest/hardware validation performed. Next: verify
+  fresh-install and version 1 upgrade boots, effective login groups, KDE pkexec
+  and serial-device access in a guest. Propagation to main remains outstanding;
+  shared documentation is unchanged on this branch.
+
 ## Current work — 2026-10-24
 
 Workbook simplification is committed as `6a5f8c2`; main's authentication and
