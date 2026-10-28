@@ -1,0 +1,95 @@
+format = "ctmodbus-tags"
+version = 1
+
+[tags]
+
+[tags."State"]
+table = "holding_registers"
+address = 0
+type = "int8"
+byte_order = "big"
+word_order = "little"
+
+[tags."BatchTimer"]
+table = "holding_registers"
+address = 1
+type = "int32"
+byte_order = "big"
+word_order = "little"
+
+[tags."EmergencyTimer"]
+table = "holding_registers"
+address = 3
+type = "int32"
+byte_order = "big"
+word_order = "little"
+
+[tags."Chem1Pump"]
+table = "coils"
+address = 10
+type = "bool"
+
+[tags."Chem2Pump"]
+table = "coils"
+address = 11
+type = "bool"
+
+[tags."Chem3Pump"]
+table = "coils"
+address = 12
+type = "bool"
+
+[tags."Mixer"]
+table = "coils"
+address = 13
+type = "bool"
+
+[tags."OuttakePump"]
+table = "coils"
+address = 14
+type = "bool"
+
+[tags."EmergencyFlush"]
+table = "coils"
+address = 15
+type = "bool"
+
+[tags."InputPause"]
+table = "discrete_inputs"
+address = 0
+type = "bool"
+
+[tags."InBitC2"]
+table = "discrete_inputs"
+address = 1
+type = "bool"
+
+[tags."InputEmergency"]
+table = "discrete_inputs"
+address = 2
+type = "bool"
+
+[tags."InBitC4"]
+table = "discrete_inputs"
+address = 3
+type = "bool"
+
+[tags."InBitC5"]
+table = "discrete_inputs"
+address = 4
+type = "bool"
+
+[tags."InBitC6"]
+table = "discrete_inputs"
+address = 5
+type = "bool"
+
+[tags."HMIPause"]
+table = "coils"
+address = 6
+type = "bool"
+
+[tags."HMIEmergency"]
+table = "coils"
+address = 8
+type = "bool"
