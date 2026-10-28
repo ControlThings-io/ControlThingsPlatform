@@ -3,16 +3,23 @@ version = 1
 
 [tags]
 
-[tags."BTimer"]
+[tags."State"]
 table = "holding_registers"
-address = 1
-type = "int32"
+address = 0
+type = "int8"
 byte_order = "big"
 word_order = "little"
 
 [tags."BatchTimer"]
 table = "holding_registers"
 address = 1
+type = "int32"
+byte_order = "big"
+word_order = "little"
+
+[tags."EmergencyTimer"]
+table = "holding_registers"
+address = 3
 type = "int32"
 byte_order = "big"
 word_order = "little"
@@ -32,38 +39,34 @@ table = "coils"
 address = 12
 type = "bool"
 
-[tags."ETimer"]
-table = "holding_registers"
-address = 3
-type = "int32"
-byte_order = "big"
-word_order = "little"
+[tags."Mixer"]
+table = "coils"
+address = 13
+type = "bool"
+
+[tags."OuttakePump"]
+table = "coils"
+address = 14
+type = "bool"
 
 [tags."EmergencyFlush"]
 table = "coils"
 address = 15
 type = "bool"
 
-[tags."EmergencyTimer"]
-table = "holding_registers"
-address = 3
-type = "int32"
-byte_order = "big"
-word_order = "little"
-
-[tags."HMIEmergency"]
-table = "coils"
-address = 8
-type = "bool"
-
-[tags."HMIPause"]
-table = "coils"
-address = 6
+[tags."InputPause"]
+table = "discrete_inputs"
+address = 0
 type = "bool"
 
 [tags."InBitC2"]
 table = "discrete_inputs"
 address = 1
+type = "bool"
+
+[tags."InputEmergency"]
+table = "discrete_inputs"
+address = 2
 type = "bool"
 
 [tags."InBitC4"]
@@ -81,59 +84,12 @@ table = "discrete_inputs"
 address = 5
 type = "bool"
 
-[tags."InputEmergency"]
-table = "discrete_inputs"
-address = 2
-type = "bool"
-
-[tags."InputPause"]
-table = "discrete_inputs"
-address = 0
-type = "bool"
-
-[tags."Mixer"]
+[tags."HMIPause"]
 table = "coils"
-address = 13
+address = 6
 type = "bool"
 
-[tags."OuttakePump"]
+[tags."HMIEmergency"]
 table = "coils"
-address = 14
+address = 8
 type = "bool"
-
-[tags."RunEPump"]
-table = "coils"
-address = 15
-type = "bool"
-
-[tags."RunInPump1"]
-table = "coils"
-address = 10
-type = "bool"
-
-[tags."RunInPump2"]
-table = "coils"
-address = 11
-type = "bool"
-
-[tags."RunInPump3"]
-table = "coils"
-address = 12
-type = "bool"
-
-[tags."RunMixer"]
-table = "coils"
-address = 13
-type = "bool"
-
-[tags."RunOutPump"]
-table = "coils"
-address = 14
-type = "bool"
-
-[tags."State"]
-table = "holding_registers"
-address = 0
-type = "int8"
-byte_order = "big"
-word_order = "little"
