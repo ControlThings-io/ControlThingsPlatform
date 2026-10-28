@@ -202,17 +202,19 @@ with `ujust toggle-user-motd` and open a new terminal to confirm it appears.
 ## ControlThings capture groups
 
 ControlThings follows Aurora's one-time startup setup pattern for the
-`wireshark` and `usbmon` groups. On the first boot where `wheel` has members,
-`controlthings-groups.service` adds all those administrator accounts to both
-capture groups, preserving their primary and other supplementary groups.
-Existing administrator accounts are included when first deploying this feature.
+`wireshark`, `usbmon` and `dialout` groups. On the first boot where `wheel` has
+members, `controlthings-groups.service` adds all those administrator accounts to
+the capture and serial-device groups, preserving their primary and other
+supplementary groups. Existing administrator accounts are included when first
+deploying this feature.
 
 The shared [controlthings-groups script](system_files/usr/libexec/controlthings-groups)
 records its successful setup version in `/etc/ublue/controlthings-groups` and
 skips later automatic runs at that version. Increment `GROUP_SETUP_VER` when a
-future policy change should reapply setup. An empty `wheel` group or failed setup
-does not record the new version; failures retry through systemd, and empty membership
-is checked again at the next boot.
+future policy change should reapply setup. Version 2 adds `dialout` after
+deployment on systems with a successful version 1 marker. An empty `wheel` group
+or failed setup does not record the new version; failures retry through systemd,
+and empty membership is checked again at the next boot.
 
 For accounts created later, or for a non-administrator login account, run this as
 the user whose memberships should be updated:
@@ -227,9 +229,9 @@ with `--user USER`, bypassing the startup marker without changing it. Check the
 result with `id -nG` in a new session. Administrators can also explicitly run
 `sudo /usr/libexec/controlthings-groups --user USERNAME` for another local account.
 
-`dialout` remains available through Aurora's existing `ujust dx-group` command;
-ControlThings does not manage it. Capture/device permissions still depend on
-Wireshark's package configuration and the available hardware. See
+Aurora's existing `ujust dx-group` command also provides `dialout` membership;
+the ControlThings helper preserves existing membership. Capture/device permissions
+still depend on Wireshark's package configuration and the available hardware. See
 [validation status](docs/STATUS.md#validation-evidence) and
 [decision](docs/DECISIONS.md#controlthings-capture-groups--2026-10-15).
 

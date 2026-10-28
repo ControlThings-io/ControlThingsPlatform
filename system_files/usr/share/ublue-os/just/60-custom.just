@@ -1,4 +1,4 @@
-# Add the current user to ControlThings packet capture groups.
+# Add the current user to ControlThings packet capture and serial device groups.
 [group('System')]
 controlthings-groups:
     #!/usr/bin/bash

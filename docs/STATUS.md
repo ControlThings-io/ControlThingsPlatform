@@ -8,8 +8,22 @@ and `DECISIONS.md`, not these shared files.
 
 ## Current work
 
+- Serial-group port to main on 2026-10-28: the `72644c7` code is staged, adding
+  `dialout` alongside `wireshark` and `usbmon` for current wheel administrators
+  and explicit manual setup. Version 2 reapplies membership on existing systems;
+  existing groups and vendor GIDs are preserved. Course-only docs are excluded;
+  shared [guidance](../DEVELOPMENT.md#controlthings-capture-groups) and
+  [decision](DECISIONS.md#controlthings-capture-groups--2026-10-15) are updated.
+  The real isolated group regression passed, including version 1 migration,
+  repeated/manual setup, empty-wheel deferral and failure handling. Bash syntax
+  and recipe formatting passed; pkexec is mocked and host accounts were untouched.
+  The queued `56b0305` first-boot fix remains required to retry during the same
+  boot after administrator creation. Next: complete that cherry-pick, rerun the
+  final group regression, then validate fresh/upgrade boots, effective login
+  groups and serial-device access. No image, remote CI or guest test was run.
+
 - Ported the Chunkah pull retry code from `19b2528` and `aea1ab8` to main on
-  2026-10-28; the second cherry-pick is resolved and staged, awaiting continuation.
+  2026-10-28, committed as `018be34` and `d17afd0` respectively.
   Course-only status is excluded. The recipe uses plain `podman pull` at most
   three times, five seconds apart, retaining Podman's internal retries for
   compatibility with the Ubuntu runner's Podman 4.9. Chunkah runs once with

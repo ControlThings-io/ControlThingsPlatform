@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix="ct-groups-tests-") as temporary:
         "passwd: files\ngroup: files [SUCCESS=merge] altfiles\nshadow: files\n"
     )
     vendor = root / "vendor-group"
-    vendor.write_text("wireshark:x:900:\n")
+    vendor.write_text("wireshark:x:900:\ndialout:x:18:\n")
 
     def sandbox(*args, check=True):
         """Run with read-only tools and only fixture account files writable."""
@@ -65,20 +65,21 @@ with tempfile.TemporaryDirectory(prefix="ct-groups-tests-") as temporary:
 
     sandbox("/controlthings-groups")
     marker = etc / "ublue/controlthings-groups"
-    assert marker.read_text() == "1\n"
+    assert marker.read_text() == "2\n"
     for user in ("alpha", "bravo"):
-        assert groups(user) == {user, "wheel", "wireshark", "usbmon"}
+        assert groups(user) == {user, "wheel", "wireshark", "usbmon", "dialout"}
     assert groups("charlie") == {"charlie"}
     assert groups("root") == {"root"}
     assert sandbox("getent", "-s", "files", "group", "wireshark").stdout.split(":")[2] == "900"
+    assert sandbox("getent", "-s", "files", "group", "dialout").stdout.split(":")[2] == "18"
     before = (etc / "group").read_text()
     sandbox("/controlthings-groups")
     assert (etc / "group").read_text() == before
 
     # Explicit setup bypasses the marker and leaves other memberships intact.
     sandbox("/controlthings-groups", "--user", "charlie")
-    assert groups("charlie") == {"charlie", "wireshark", "usbmon"}
-    assert marker.read_text() == "1\n"
+    assert groups("charlie") == {"charlie", "wireshark", "usbmon", "dialout"}
+    assert marker.read_text() == "2\n"
     before = (etc / "group").read_text()
     sandbox("/controlthings-groups", "--user", "charlie")
     assert (etc / "group").read_text() == before
@@ -92,9 +93,16 @@ with tempfile.TemporaryDirectory(prefix="ct-groups-tests-") as temporary:
     assert sandbox("/controlthings-groups", check=False).returncode != 0
     assert not marker.exists()
     (etc / "group").write_text(before)
-    marker.write_text("0\n")
+    # Simulate version 1: capture groups were set up, but dialout was not.
+    for user in ("alpha", "bravo"):
+        sandbox("gpasswd", "--delete", user, "dialout")
+        assert groups(user) == {user, "wheel", "wireshark", "usbmon"}
+    marker.write_text("1\n")
     sandbox("/controlthings-groups")
-    assert marker.read_text() == "1\n"
+    assert marker.read_text() == "2\n"
+    for user in ("alpha", "bravo"):
+        assert groups(user) == {user, "wheel", "wireshark", "usbmon", "dialout"}
+    assert groups("charlie") == {"charlie", "wireshark", "usbmon", "dialout"}
 
     # Verify the real recipe delegates only the current user to the shared script.
     mock_bin = root / "bin"

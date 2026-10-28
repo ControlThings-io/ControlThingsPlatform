@@ -304,9 +304,18 @@ to `wireshark` and `usbmon`; leave setup pending without wheel users and mark
 success only after all changes succeed. Preserve existing memberships and vendor
 GIDs. Manual `--user` setup bypasses the marker for later accounts.
 
-This replaces the useradd-hook proposal. Dialout stays with Aurora's DX tooling;
-module loading and device-permission policy are outside this feature. Actual
-capture permissions still require hardware validation.
+This replaces the useradd-hook proposal. Module loading and device-permission
+policy are outside this feature. Actual capture permissions still require hardware
+validation.
+
+Accepted serial-group port to main — 2026-10-28: include `dialout` alongside
+`wireshark` and `usbmon` in the existing boot service and manual helper. Setup
+version 2 reapplies membership to existing administrators while preserving
+other memberships and vendor GIDs. This supersedes the earlier decision to
+delegate `dialout` exclusively to Aurora's DX tooling; the shared helper now
+provides capture and serial groups consistently. The manual marker-bypass and
+success-marker contracts remain unchanged. See
+[operation guidance](../DEVELOPMENT.md#controlthings-capture-groups).
 
 ## New-user terminal MOTD default — 2026-10-17
 
