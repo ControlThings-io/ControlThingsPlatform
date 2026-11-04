@@ -34,6 +34,9 @@ PACKAGES=(
 # Build containers should not update repository usage-counting state.
 dnf5 -y --setopt='*.countme=false' install "${PACKAGES[@]}"
 
+# Assign capture/serial/USB groups during account creation, before first login.
+bash /ctx/configure-user-groups.sh
+
 # Locate the RPM's application directory on both architectures. Keep user-editable
 # defaults with Firefox rather than creating or rewriting per-user profiles.
 firefox_distribution="$(rpm --eval '%{_libdir}')/firefox/distribution"
@@ -77,8 +80,6 @@ done
 #### Example for enabling a System Unit File
 
 systemctl enable podman.socket
-chmod 0755 /usr/libexec/controlthings-groups
-systemctl enable controlthings-groups.service
 chmod 0755 /usr/libexec/controlthings-tools
 chmod 0755 /usr/libexec/uv-tools
 chmod 0440 /etc/sudoers.d/uv-tools

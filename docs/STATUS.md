@@ -30,23 +30,31 @@ and `DECISIONS.md`, not these shared files.
   configurations remain unvalidated. Next: build latest/branch VMDK and QCOW2
   artifacts and verify downloads and guests.
 
-- Serial-group and first-boot retry port to main on 2026-10-28: `dialout` support
-  and first-boot retries are committed as `283f23f` and `7531cb2`. Setup version 2
-  adds `wireshark`, `usbmon` and `dialout` to current wheel administrators and
-  supports explicit manual setup, preserving memberships and vendor GIDs. An empty
-  wheel group now exits 75 without a marker,
-  activating the service's existing 30-second retries during the same boot.
-  Course-only docs are excluded; shared
+- Replaced boot-time group setup on main on 2026-11-03 with account-creation
+  defaults after the user reported continued races. A build-only configurator
+  prepares writable group entries with preserved local/vendor GIDs, configures
+  useradd defaults for `wireshark`, `usbmon`, `dialout` and `plugdev`, and sets KDE
+  Plasma Setup's first-user groups to those plus `wheel`. Existing memberships
+  are preserved; no automatic migration is provided. The old service, runtime
+  helper and ujust command are removed. This supersedes `283f23f`/`7531cb2` on
+  main; the course branch remains unchanged. See
   [guidance](../DEVELOPMENT.md#controlthings-capture-groups) and
-  [decision](DECISIONS.md#controlthings-capture-groups--2026-10-15) are updated.
-  The final real isolated group regression passed, including version 1 migration,
-  repeat/manual setup, initial empty-wheel failure followed by administrator
-  creation and successful retry, failure handling and service restart policy.
-  Bash syntax, recipe formatting, documentation links and whitespace checks
-  passed; pkexec is mocked and host accounts were untouched. Next: validate
-  fresh/upgrade boots, effective login groups and serial access. Inspect the guest
-  service journal/marker; if setup completes after login, log out/back in.
-  No image build, remote CI or guest test was run.
+  [accepted replacement](DECISIONS.md#controlthings-capture-groups--2026-10-15).
+  Passed `tests/check_controlthings_groups.py` with real useradd/usermod, KDE
+  config tools and immediate process group initialization: normal/first-user
+  groups before login, system-account exclusion, explicit overrides,
+  GID/account/config preservation, repeat/absent-key setup, missing-config
+  guards, Bash syntax and Just formatting. The fixture uses private files and
+  subordinate UID/GID mappings; host accounts were untouched. Also passed
+  `tests/check_uv_tools.py`, documentation link-target and whitespace review.
+  `tests/check_controlthings_tools.py` fails at its stale 29-formula expectation
+  against the current 30-formula Brewfile; reproduced unchanged at `b90df6b`.
+  This unrelated test/manifest discrepancy remains open. No image build, remote
+  CI or guest test was run. Next: build a fresh VM and verify the actual KDE wizard,
+  effective groups at first login, capture/serial/USB access and bootc upgrades
+  with existing account/config state. With explicit user approval, README now
+  describes automatic group setup for new accounts and links to DEVELOPMENT for
+  existing-account setup, replacing the removed ujust command's instructions.
 
 - Ported the Chunkah pull retry code from `19b2528` and `aea1ab8` to main on
   2026-10-28, committed as `018be34` and `d17afd0` respectively.
@@ -348,7 +356,7 @@ Obsidian extra-data execution or full-size bootc/Anaconda import.
 | Feature | Established evidence | Remaining checks |
 | --- | --- | --- |
 | Disk orchestration | Both formats, architectures, channels and failure boundaries in fixtures; AMD64 smoke QCOW2 CI | Full bundle capacity, ISO blank-disk/offline install, S3 uploads; ARM64 needs a published source |
-| Capture groups | Real isolated groupadd/usermod, version markers, vendor GIDs, failure/retry and recipe delegation | Boot service, KDE pkexec, effective login groups and physical packet/USB capture |
+| Capture groups | Real isolated groupadd/useradd/usermod and KDE configuration; creation defaults, system-account exclusion, preserved GIDs/accounts | Actual KDE first-user flow, effective first-login groups, bootc upgrades and physical capture/serial/USB access |
 | CyberChef | Extraction/security regressions; live v11.5.0 installation smoke test on 2026-10-15; user-reported VM use | RPM Firefox launcher/icon; offline Base64, worker/SHA-256 and file input on current image |
 | Backgrounds | Mocked Plasma hook; real KDE system/user precedence tests; user-reported new-user defaults | Saved choices across update/reboot; light theme and extra displays |
 | Rechunking/countme | Regression/cleanup fixtures; successful historical Chunkah CI | Controlled identical-input rebuild and small-change update measurements |

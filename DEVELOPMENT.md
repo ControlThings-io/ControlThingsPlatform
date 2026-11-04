@@ -201,41 +201,40 @@ with `ujust toggle-user-motd` and open a new terminal to confirm it appears.
 
 ## ControlThings capture groups
 
-ControlThings follows Aurora's one-time startup setup pattern for the
-`wireshark`, `usbmon` and `dialout` groups. On the first boot where `wheel` has
-members, `controlthings-groups.service` adds all those administrator accounts to
-the capture and serial-device groups, preserving their primary and other
-supplementary groups. Existing administrator accounts are included when first
-deploying this feature.
+New accounts receive `wireshark`, `usbmon`, `dialout` and `plugdev` during account
+creation. The image's [build configurator](build_files/configure-user-groups.sh)
+runs after package installation, makes vendor groups writable in `/etc/group`
+while preserving their GIDs, and creates any missing groups. It preserves other
+account settings and configures both supported creation paths:
 
-The shared [controlthings-groups script](system_files/usr/libexec/controlthings-groups)
-records its successful setup version in `/etc/ublue/controlthings-groups` and
-skips later automatic runs at that version. Increment `GROUP_SETUP_VER` when a
-future policy change should reapply setup. Version 2 adds `dialout` after
-deployment on systems with a successful version 1 marker. An empty `wheel` group
-or failed setup does not record the new version. Empty membership exits 75
-(temporary failure), activating the service's existing `Restart=on-failure` and
-`RestartSec=30` settings. Setup retries during the same boot until administrators
-exist and all group updates succeed, without requiring another boot.
+- `/etc/default/useradd`: `GROUPS=wireshark,usbmon,dialout,plugdev` applies to normal
+  accounts, including non-administrators. Accounts created with `useradd --system`
+  do not inherit these defaults. An explicit `useradd -G` list overrides them;
+  tools that bypass `useradd` may ignore them. This distinguishes normal/system
+  accounts, rather than inspecting whether their shell is interactive.
+- `/etc/xdg/plasmasetuprc`, `[Accounts]`:
+  `UserGroups=wheel,wireshark,usbmon,dialout,plugdev` configures the first
+  administrator created by KDE Plasma Setup. Its additions finish before login.
+  General useradd defaults do not grant `wheel` membership.
 
-For accounts created later, or for a non-administrator login account, run this as
-the user whose memberships should be updated:
+This replaces the ControlThings boot service, version marker and
+`ujust controlthings-groups` command. There is no administrator-discovery polling
+or later automatic membership update. Existing account memberships are preserved;
+updating the OS does not retroactively apply these defaults to existing users.
+Local edits to `/etc` configuration may retain precedence during an OS update.
+Old `/etc/ublue/controlthings-groups` markers have no effect and can be left in place.
+
+For an existing account, or one created through another tool, an administrator
+can apply the memberships explicitly:
 
 ```bash
-ujust controlthings-groups
+sudo usermod --append --groups wireshark,usbmon,dialout,plugdev USERNAME
 ```
 
-Authorize the request, then log out completely and log back in. If automatic setup
-finishes after the first login, log out/back in to refresh that session's effective
-groups too. The [recipe](system_files/usr/share/ublue-os/just/60-custom.just) calls
-the same script
-with `--user USER`, bypassing the startup marker without changing it. Check the
-result with `id -nG` in a new session. Administrators can also explicitly run
-`sudo /usr/libexec/controlthings-groups --user USERNAME` for another local account.
-
-Aurora's existing `ujust dx-group` command also provides `dialout` membership;
-the ControlThings helper preserves existing membership. Capture/device permissions
-still depend on Wireshark's package configuration and the available hardware. See
+Log out completely and back in after updating an existing account. Check `id -nG`
+in the new session; `id -nG USERNAME` shows stored membership independently of the
+current session. Capture/device permissions still depend on Wireshark's package
+configuration and the available hardware. See
 [validation status](docs/STATUS.md#validation-evidence) and
 [decision](docs/DECISIONS.md#controlthings-capture-groups--2026-10-15).
 
@@ -472,7 +471,8 @@ URH's wheel supplies Qt and compiled extensions on AMD64. The
 NumPy to URH's isolated source build where no wheel exists; `gcc-c++` and `libgomp`
 are available for native builds/updates. `libusb1` supports GreatFET/RfCat. Device
 rules grant GreatFET/RfCat access to active local sessions; RfCat also supports
-`dialout`. Serial-group setup remains Aurora's `ujust dx-group` responsibility.
+`dialout`. New-user serial membership follows the
+[capture-group defaults](#controlthings-capture-groups).
 RFcat's optional legacy PySide2 spectrum-analyzer extra is not selected. Additional
 URH SDR backends can require their native libraries/development packages; the shared
 rfcat environment is not automatically importable from URH's isolated environment.

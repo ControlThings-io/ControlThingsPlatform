@@ -1,134 +1,150 @@
-"""Run ``python3 tests/check_controlthings_groups.py`` on Aurora/Fedora Atomic.
+"""Check new-user groups with real Fedora account tools in a private filesystem.
 
-Requires Bubblewrap user namespaces, NSS altfiles (/usr/lib/group), shadow-utils,
-Bash, and just. Real group tools operate only on temporary account files inside
-a namespace; host accounts stay untouched. The ujust check mocks pkexec, so live
-desktop authorization and startup service execution remain integration checks.
+Run ``python3 tests/check_controlthings_groups.py``. Requires Bubblewrap, unshare
+with subordinate UID/GID mappings, NSS altfiles, shadow-utils, KDE config tools,
+Bash, Python and just.
+Only temporary account/config files are writable; host accounts are untouched.
+Exercise the image configurator and Plasma Setup's useradd/usermod sequence;
+the graphical wizard, KAuth and deployed bootc /etc merges still need VM checks.
 """
 
-import os
 from pathlib import Path
 import subprocess
 import tempfile
 
 
-script = Path("system_files/usr/libexec/controlthings-groups").resolve()
-recipe = Path("system_files/usr/share/ublue-os/just/60-custom.just").resolve()
-unit = Path("system_files/usr/lib/systemd/system/controlthings-groups.service").read_text()
-assert "Restart=on-failure\n" in unit
-assert "RestartSec=30\n" in unit
-assert "StartLimitIntervalSec=0\n" in unit
-assert script.stat().st_mode & 0o111
-for path in (script, Path("build_files/build.sh")):
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "build_files/configure-user-groups.sh"
+TARGET_GROUPS = {"wireshark", "usbmon", "dialout", "plugdev"}
+build = (ROOT / "build_files/build.sh").read_text()
+assert build.index('install "${PACKAGES[@]}"') < build.index(
+    "bash /ctx/configure-user-groups.sh") < build.index("/usr/libexec/uv-tools setup")
+assert "controlthings-groups" not in build
+for relative in ("system_files/usr/libexec/controlthings-groups",
+                 "system_files/usr/lib/systemd/system/controlthings-groups.service"):
+    assert not (ROOT / relative).exists()
+recipe = ROOT / "system_files/usr/share/ublue-os/just/60-custom.just"
+assert "controlthings-groups" not in recipe.read_text()
+for path in (SCRIPT, ROOT / "build_files/build.sh"):
     subprocess.run(["bash", "-n", str(path)], check=True)
 subprocess.run(["just", "--unstable", "--fmt", "--check", "-f", str(recipe)], check=True)
 
 with tempfile.TemporaryDirectory(prefix="ct-groups-tests-") as temporary:
     root = Path(temporary)
     etc = root / "etc"
-    etc.mkdir()
+    (etc / "default").mkdir(parents=True)
+    (etc / "xdg").mkdir()
     (etc / "passwd").write_text(
         "root:x:0:0:root:/root:/bin/bash\n"
-        "alpha:x:1000:1000::/home/alpha:/bin/bash\n"
-        "bravo:x:1001:1001::/home/bravo:/bin/bash\n"
-        "charlie:x:1002:1002::/home/charlie:/bin/bash\n"
-    )
+        "existing:x:1000:1000::/home/existing:/bin/bash\n")
     (etc / "group").write_text(
-        "root:x:0:\nwheel:x:10:\n"
-        "alpha:x:1000:\nbravo:x:1001:\ncharlie:x:1002:\n"
-    )
+        "root:x:0:\nwheel:x:10:existing\nexisting:x:1000:\n"
+        "plugdev:x:480:existing\nextra:x:481:\n")
     (etc / "gshadow").write_text(
-        "root:!::\nwheel:!::\nalpha:!::\nbravo:!::\ncharlie:!::\n"
-    )
-    (etc / "login.defs").write_text("SYS_GID_MIN 201\nSYS_GID_MAX 999\n")
+        "root:!::\nwheel:!::existing\nexisting:!::\n"
+        "plugdev:!::existing\nextra:!::\n")
+    (etc / "shadow").write_text("root:!*:1::::::\nexisting:!*:1::::::\n")
+    (etc / "login.defs").write_text(
+        "UID_MIN 1000\nUID_MAX 60000\nSYS_UID_MIN 201\nSYS_UID_MAX 999\n"
+        "SYS_GID_MIN 201\nSYS_GID_MAX 999\nUSERGROUPS_ENAB yes\n")
     (etc / "nsswitch.conf").write_text(
-        "passwd: files\ngroup: files [SUCCESS=merge] altfiles\nshadow: files\n"
-    )
+        "passwd: files\ngroup: files [SUCCESS=merge] altfiles\nshadow: files\n")
+    defaults = etc / "default/useradd"
+    defaults.write_text(
+        "# Inherited defaults\nGROUP=100\nHOME=/home\nSHELL=/bin/bash\n"
+        "SKEL=/etc/skel\nCREATE_MAIL_SPOOL=no\nGROUPS=extra\nGROUPS=extra\n")
+    plasma = etc / "xdg/plasmasetuprc"
+    plasma.write_text("# Inherited KDE settings\n[Accounts]\nUserGroups=wheel\n"
+                      "[Other]\nKeep=unchanged\n")
     vendor = root / "vendor-group"
-    vendor.write_text("wireshark:x:900:\ndialout:x:18:\n")
+    vendor.write_text("wireshark:x:900:\ndialout:x:18:\nplugdev:x:46:\n")
 
-    def sandbox(*args, check=True):
-        """Run with read-only tools and only fixture account files writable."""
+    def sandbox(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+        """Run real tools with only fixture accounts/config writable."""
         command = [
-            "bwrap", "--unshare-user", "--uid", "0", "--gid", "0",
-            "--unshare-pid", "--unshare-ipc", "--unshare-uts",
+            "unshare", "--user", "--map-auto", "--map-root-user", "bwrap",
+            "--unshare-pid", "--unshare-net", "--unshare-ipc", "--unshare-uts",
             "--ro-bind", "/usr", "/usr", "--symlink", "usr/bin", "/bin",
             "--symlink", "usr/sbin", "/sbin", "--symlink", "usr/lib", "/lib",
             "--symlink", "usr/lib64", "/lib64", "--proc", "/proc", "--dev", "/dev",
             "--bind", str(etc), "/etc", "--tmpfs", "/run", "--tmpfs", "/var",
+            "--tmpfs", "/home", "--tmpfs", "/tmp",
+            "--setenv", "XDG_CONFIG_HOME", "/tmp/config",
             "--ro-bind", str(vendor), "/usr/lib/group",
-            "--ro-bind", str(script), "/controlthings-groups",
+            "--ro-bind", str(SCRIPT), "/configure-user-groups.sh",
         ]
         result = subprocess.run(command + list(args), text=True, capture_output=True)
         if check and result.returncode:
-            raise AssertionError(f"{args}: {result.stderr}")
+            raise AssertionError(f"{args}: {result.stdout}\n{result.stderr}")
         return result
 
-    def groups(user):
+    def groups(user: str) -> set[str]:
+        """Read stored memberships without a login or boot service."""
         return set(sandbox("id", "-nG", user).stdout.split())
 
-    marker = etc / "ublue/controlthings-groups"
-    # First boot can reach the service before account setup adds administrators.
-    # A temporary failure must activate the unit's Restart=on-failure policy.
-    assert sandbox("/controlthings-groups", check=False).returncode == 75
-    assert not marker.exists()
-    for user in ("alpha", "bravo"):
-        assert groups(user) == {user}
-        sandbox("gpasswd", "--add", user, "wheel")
-    sandbox("/controlthings-groups")
-    assert marker.read_text() == "2\n"
-    for user in ("alpha", "bravo"):
-        assert groups(user) == {user, "wheel", "wireshark", "usbmon", "dialout"}
-    assert groups("charlie") == {"charlie"}
-    assert groups("root") == {"root"}
-    assert sandbox("getent", "-s", "files", "group", "wireshark").stdout.split(":")[2] == "900"
-    assert sandbox("getent", "-s", "files", "group", "dialout").stdout.split(":")[2] == "18"
-    before = (etc / "group").read_text()
-    sandbox("/controlthings-groups")
-    assert (etc / "group").read_text() == before
+    before = {name: (etc / name).read_bytes() for name in ("passwd", "shadow")}
+    sandbox("bash", "/configure-user-groups.sh")
+    assert groups("existing") == {"existing", "wheel", "plugdev"}
+    assert all((etc / name).read_bytes() == content for name, content in before.items())
+    for group, gid in (("wireshark", "900"), ("dialout", "18"), ("plugdev", "480")):
+        assert sandbox("getent", "-s", "files", "group", group).stdout.split(":")[2] == gid
+    assert sandbox("getent", "-s", "files", "group", "usbmon").stdout
+    assert defaults.read_text().count("GROUPS=") == 1
+    assert "HOME=/home\nSHELL=/bin/bash\nSKEL=/etc/skel\n" in defaults.read_text()
+    assert "GROUP=100\n" in defaults.read_text()
+    assert "GROUPS=wireshark,usbmon,dialout,plugdev\n" in defaults.read_text()
+    kde_groups = sandbox("kreadconfig6", "--file", "/etc/xdg/plasmasetuprc",
+                         "--group", "Accounts", "--key", "UserGroups").stdout.strip()
+    assert set(kde_groups.split(",")) == TARGET_GROUPS | {"wheel"}
+    assert sandbox("kreadconfig6", "--file", "/etc/xdg/plasmasetuprc",
+                   "--group", "Other", "--key", "Keep").stdout.strip() == "unchanged"
 
-    # Explicit setup bypasses the marker and leaves other memberships intact.
-    sandbox("/controlthings-groups", "--user", "charlie")
-    assert groups("charlie") == {"charlie", "wireshark", "usbmon", "dialout"}
-    assert marker.read_text() == "2\n"
-    before = (etc / "group").read_text()
-    sandbox("/controlthings-groups", "--user", "charlie")
-    assert (etc / "group").read_text() == before
-    assert sandbox("/controlthings-groups", "--user", "missing", check=False).returncode != 0
+    # Aurora normally ships no GROUPS key; this path must also add the defaults.
+    defaults.write_text("\n".join(line for line in defaults.read_text().splitlines()
+                                   if not line.startswith("GROUPS=")) + "\n")
+    sandbox("bash", "/configure-user-groups.sh")
+    assert "GROUPS=wireshark,usbmon,dialout,plugdev\n" in defaults.read_text()
 
-    marker.unlink()
-    (etc / "group").write_text(before.replace("wheel:x:10:alpha,bravo", "wheel:x:10:"))
-    assert sandbox("/controlthings-groups", check=False).returncode == 75
-    assert not marker.exists()
-    (etc / "group").write_text(before.replace("wheel:x:10:alpha,bravo", "wheel:x:10:missing"))
-    assert sandbox("/controlthings-groups", check=False).returncode != 0
-    assert not marker.exists()
-    (etc / "group").write_text(before)
-    # Simulate version 1: capture groups were set up, but dialout was not.
-    for user in ("alpha", "bravo"):
-        sandbox("gpasswd", "--delete", user, "dialout")
-        assert groups(user) == {user, "wheel", "wireshark", "usbmon"}
-    marker.write_text("1\n")
-    sandbox("/controlthings-groups")
-    assert marker.read_text() == "2\n"
-    for user in ("alpha", "bravo"):
-        assert groups(user) == {user, "wheel", "wireshark", "usbmon", "dialout"}
-    assert groups("charlie") == {"charlie", "wireshark", "usbmon", "dialout"}
+    # Reapplying image configuration must preserve account data and defaults.
+    paths = ("group", "gshadow", "default/useradd", "xdg/plasmasetuprc")
+    snapshot = {name: (etc / name).read_bytes() for name in paths}
+    sandbox("bash", "/configure-user-groups.sh")
+    assert all((etc / name).read_bytes() == data for name, data in snapshot.items())
 
-    # Verify the real recipe delegates only the current user to the shared script.
-    mock_bin = root / "bin"
-    mock_bin.mkdir()
-    mock = mock_bin / "pkexec"
-    capture = root / "pkexec-args"
-    mock.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$CAPTURE_ARGS"\n')
-    mock.chmod(0o755)
-    env = dict(os.environ, PATH=str(mock_bin) + os.pathsep + os.environ["PATH"],
-               CAPTURE_ARGS=str(capture))
-    subprocess.run(["just", "-f", str(recipe), "controlthings-groups"], env=env,
-                   capture_output=True, text=True, check=True)
-    username = subprocess.check_output(["id", "-un"], text=True).strip()
-    assert capture.read_text().splitlines() == ["/usr/libexec/controlthings-groups", "--user", username]
+    # Normal users get defaults before wheel membership exists, with no retries.
+    sandbox("useradd", "--no-log-init", "--no-create-home", "--user-group", "student")
+    assert groups("student") == {"student"} | TARGET_GROUPS
+    assert "wheel" not in groups("student")
+    # The first administrator follows Plasma Setup 6.7.5's creation sequence.
+    sandbox("useradd", "--no-log-init", "--create-home", "--user-group", "first")
+    sandbox("usermod", "--append", "--groups", kde_groups, "first")
+    assert groups("first") == {"first", "wheel"} | TARGET_GROUPS
+    # A process initializing its groups immediately sees them on its first run.
+    for user in ("student", "first"):
+        effective = sandbox("setpriv", "--reuid", user, "--regid", user,
+                            "--init-groups", "--", "id", "-nG").stdout.split()
+        assert set(effective) == groups(user)
+    # The KDE setting works independently when useradd defaults are overridden.
+    sandbox("useradd", "--no-log-init", "--no-create-home", "--user-group",
+            "--groups", "extra", "explicit")
+    assert groups("explicit") == {"explicit", "extra"}
+    sandbox("usermod", "--append", "--groups", kde_groups, "explicit")
+    assert groups("explicit") == {"explicit", "extra", "wheel"} | TARGET_GROUPS
+    sandbox("useradd", "--no-log-init", "--system", "--no-create-home",
+            "--user-group", "--shell", "/usr/sbin/nologin", "daemon-test")
+    assert groups("daemon-test") == {"daemon-test"}
+    assert groups("existing") == {"existing", "wheel", "plugdev"}
 
-print("PASS real group tools: all wheel users, manual user, preserved memberships/vendor GID,")
-print("     marker skip/upgrade, first-boot retry after wheel creation, failure handling;")
-print("     ujust delegation, service restart policy and syntax")
+    # Missing upstream config must fail before group/config changes.
+    for path in (defaults, plasma):
+        data = path.read_bytes()
+        path.unlink()
+        before_group = (etc / "group").read_bytes()
+        assert sandbox("bash", "/configure-user-groups.sh", check=False).returncode != 0
+        assert (etc / "group").read_bytes() == before_group
+        assert not path.exists()
+        path.write_bytes(data)
+
+print("PASS isolated real useradd/usermod: normal and first-user defaults, system-account")
+print("     exclusion, explicit overrides, preserved vendor/local GIDs and existing users;")
+print("     KDE settings, repeat configuration, missing-config guards and build wiring")
