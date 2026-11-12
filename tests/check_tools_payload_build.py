@@ -177,7 +177,8 @@ esac
         'org.zaproxy.ZAP',
     ]
     assert (work / 'flatpak/overrides/org.zaproxy.ZAP').read_text() == '[Context]\nsockets=x11;\n'
-    assert len(installed['brew']) == 29
+    assert len(installed['brew']) == 30
+    assert 'nmap' in installed['brew']
     assert 'ripgrep' in installed['brew']
     assert 'ettercap' not in installed['brew']
     assert installed['profile'] == 'controlthings'

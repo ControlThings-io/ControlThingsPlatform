@@ -69,11 +69,8 @@ applies it for the invoking user. Other existing users can apply it and restart 
 flatpak override --user --socket=x11 org.zaproxy.ZAP
 ```
 
-For capture-group access, run as your normal login user, then log out and back in:
-
-```bash
-ujust controlthings-groups
-```
+New accounts receive capture and device groups automatically. For existing-account
+setup, see the [capture-group guidance](DEVELOPMENT.md#controlthings-capture-groups).
 
 Capture also depends on hardware and device permissions. Run `ujust update` for
 manual updates, `ujust toggle-updates` to configure Aurora automatic updates, or

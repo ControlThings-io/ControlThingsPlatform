@@ -298,15 +298,58 @@ conditions. See [build instructions](../DEVELOPMENT.md#cyberchef-offline-applica
 
 ## ControlThings capture groups — 2026-10-15
 
-Use one shared root script for a versioned boot oneshot and the explicit
+Original choice (superseded on 2026-11-03): use one shared root script for a
+versioned boot oneshot and the explicit
 `ujust controlthings-groups` command. Automatically add all current wheel members
 to `wireshark` and `usbmon`; leave setup pending without wheel users and mark
 success only after all changes succeed. Preserve existing memberships and vendor
 GIDs. Manual `--user` setup bypasses the marker for later accounts.
 
-This replaces the useradd-hook proposal. Dialout stays with Aurora's DX tooling;
-module loading and device-permission policy are outside this feature. Actual
-capture permissions still require hardware validation.
+This replaces the useradd-hook proposal. Module loading and device-permission
+policy are outside this feature. Actual capture permissions still require hardware
+validation.
+
+Accepted serial-group port to main — 2026-10-28: include `dialout` alongside
+`wireshark` and `usbmon` in the existing boot service and manual helper. Setup
+version 2 reapplies membership to existing administrators while preserving
+other memberships and vendor GIDs. This supersedes the earlier decision to
+delegate `dialout` exclusively to Aurora's DX tooling; the shared helper now
+provides capture and serial groups consistently. The manual marker-bypass and
+success-marker contracts remain unchanged. See
+[operation guidance](../DEVELOPMENT.md#controlthings-capture-groups).
+
+Accepted first-boot retry port — 2026-10-28: treat empty wheel membership as
+temporary failure (exit 75) without writing the success marker. The existing
+service retries every 30 seconds during the same boot, allowing setup after the
+initial administrator account is created. This supersedes the earlier successful
+empty-group exit that deferred setup until another boot. Preserve setup version
+2, administrator selection and explicit manual setup. The isolated regression
+checks administrator creation between attempts; real guest startup and effective
+login groups remain validation items in [STATUS.md](STATUS.md#current-work).
+
+Accepted account-creation replacement — 2026-11-03: replace the ControlThings
+boot service, runtime helper, version marker and ujust command with defaults
+applied during account creation. The user reports continued first-boot races;
+assigning memberships before login removes the dependency on administrator
+discovery and boot-service timing. This supersedes the automatic retry and
+manual-helper contracts above; it does not introduce a useradd hook.
+
+One build-only configurator prepares local `wireshark`, `usbmon`, `dialout` and
+`plugdev` group entries after package installation, retaining existing local
+entries and vendor GIDs and creating missing groups. It sets `GROUPS` in
+`/etc/default/useradd` for normal accounts and `[Accounts] UserGroups` in
+`/etc/xdg/plasmasetuprc` for KDE's first-user flow. Only the latter grants `wheel`.
+Include `plugdev` so the first user also gets Aurora's USB group without relying
+on Aurora's independent one-time service. Preserve unrelated configuration.
+
+The scope expands from current wheel administrators to newly created normal
+accounts. System accounts created with `useradd --system` are excluded; explicit
+`useradd -G` overrides and tools bypassing useradd remain outside those defaults.
+Existing memberships stay unchanged, with explicit `usermod --append` available
+for existing users. No automatic migration or new boot service is introduced.
+Local `/etc` overrides can affect upgrades. See the
+[operation guidance](../DEVELOPMENT.md#controlthings-capture-groups) and
+[current validation](STATUS.md#current-work).
 
 ## New-user terminal MOTD default — 2026-10-17
 

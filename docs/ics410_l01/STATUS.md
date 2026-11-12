@@ -1,37 +1,42 @@
 # ICS410 L01 current status
 
-## Serial device groups — 2026-10-28
+## New-user permissions — 2026-11-11
 
-- Committed as `72644c7`: added `dialout` alongside `wireshark` and `usbmon` for
-  automatic setup of current `wheel` members and explicit manual setup.
-  Version 2 reapplies the policy to
-  existing administrators after deployment; existing memberships and vendor GIDs
-  are preserved. See [operation guidance](DEVELOPMENT.md#capture-and-serial-device-groups)
-  and [decision](DECISIONS.md#serial-device-group-membership--2026-10-27).
-- User guest report on 2026-10-28: the initial first-boot administrator did not
-  receive the expected membership automatically; `ujust controlthings-groups`
-  succeeded and membership persisted through reboots. Exact deployed image and
-  service logs were not supplied. Automatic setup is not yet validated.
-- Fixed the startup/account-creation race: empty `wheel` membership now exits 75
-  instead of success, activating the service's existing 30-second retries during
-  the same boot. No marker is written while waiting. This race is proven in code;
-  whether it caused the reported guest failure remains unconfirmed without logs.
-- Passed `python3 tests/check_controlthings_groups.py` on 2026-10-28: real isolated
-  group tools checked all wheel users, explicit non-administrator setup, preserved vendor
-  GIDs/memberships, version 1 migration, repeat runs, initial empty-wheel failure
-  followed by administrator creation and successful retry, and failure handling.
-  The new retry regression failed before the fix and passed afterward. Recipe
-  delegation uses mocked pkexec; service restart configuration, Bash syntax,
-  Just formatting and whitespace/link review passed. Account mutations stayed
-  inside temporary Bubblewrap fixtures, with execution outside the default
-  sandbox to permit the account tools' audit access. Earlier systemd unit
-  verification passed on 2026-10-27; the unit has not changed during this repair.
-- No new image build, remote CI or corrected guest/hardware validation performed.
-  Next: test a fresh first-boot administrator, inspect the service journal/marker
-  and use `id -nG USERNAME` to confirm stored membership. If setup finishes after
-  login, log out/back in and verify effective groups. Check version 1 upgrades and
-  serial-device access. Propagation to main remains outstanding; shared
-  documentation is unchanged on this branch.
+- Ported main's `7b43999bb626a0daf34255c8d777fce63b4efea0` to the course branch
+  with workbook and disk-build account integration; changes are uncommitted.
+  New normal accounts receive `wireshark`, `usbmon`, `dialout` and `plugdev`;
+  Plasma Setup adds `wheel` for the first administrator. The boot service,
+  runtime helper and ujust recipe are removed, superseding `72644c7`/`56b0305`'s
+  versioned setup and retry behavior. Existing memberships are preserved with
+  no automatic migration. See [guidance](DEVELOPMENT.md#capture-and-serial-device-groups)
+  and [decision](DECISIONS.md#account-creation-defaults--2026-11-11).
+- Workbook account commands, cron/at enablement and update presets are preserved.
+  Both workbook accounts use `--system` and do not inherit device groups.
+  The disposable Homebrew builder explicitly opts out of supplementary groups.
+  The group regression executes the actual branch account-creation commands
+  and checks stored and effective memberships. Workbook/container integration
+  and base-image pin remain intact. README matches main at `7b43999`.
+- Passed `tests/check_controlthings_groups.py` with real host Fedora account
+  tools and KDE config tools in private Bubblewrap fixtures: normal/first-user
+  defaults, immediate effective groups, system-account exclusion, vendor/local
+  GIDs, existing memberships, repeat configuration and missing-config guards.
+  The actual workbook and Homebrew account commands also passed stored/effective
+  group checks. Subordinate UID/GID mapping required execution outside the default
+  sandbox; host account files were never writable.
+- Also passed `tests/check_workbook.py`, `tests/check_uv_tools.py`,
+  `tests/check_tools_payload_build.py`, `tests/check_disk_payload_reuse.py` and
+  `tests/check_workflow_tags.py`, plus Bash syntax, Just formatting, local Markdown
+  file/heading links and whitespace review. Workbook/payload package, service,
+  sudo and network operations are mocked; these do not establish guest behavior.
+  The payload check initially failed its stale 29-formula assertion, reproduced
+  unchanged at `56b0305`; corrected it to the existing 30 selections with an
+  explicit `nmap` assertion. The application manifest is unchanged.
+- No new image build, remote CI or VM/hardware validation performed. The pinned
+  base is not cached locally. Next: verify the
+  configurator against pinned Aurora `stable-20261022.1`, then a fresh VM's actual
+  Plasma wizard and effective first-login groups, serial/capture/USB access,
+  workbook operations and container sample. Check upgrades with existing `/etc`
+  state and accounts; use explicit `usermod --append` for missing memberships.
 
 ## Current work — 2026-10-24
 
@@ -66,7 +71,7 @@ reliability changes were merged as `39504c2`. Workbook API authentication is com
   CI and verify repacking/publication/signing before preparing a fresh disk payload.
 
 - Explicit Bash invocation is committed as `73db909`. The launcher is now
-  installed directly at `/usr/bin/workbook-update` (uncommitted cleanup), replacing
+  installed directly at `/usr/bin/workbook-update`, replacing
   the libexec symlink. Checks verify a regular executable file and no libexec copy.
   Sudoers allows the exact script with no flags, either supported flag, or both
   orders. Guest evidence: direct invocation failed at mode 0644; chmod allowed

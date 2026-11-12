@@ -35,7 +35,8 @@ Path('/tmp/controlthings.Brewfile').write_text(
 Path('/tmp/controlthings-flatpaks.txt').write_text('\n'.join(selection['flatpak']) + '\n')
 PY
 tar --zstd -xf /usr/share/homebrew.tar.zst -C /
-useradd --no-create-home --home-dir /home/linuxbrew --shell /bin/bash ct-brew-build
+# This disposable build account must not inherit normal users' device groups.
+useradd --no-create-home --home-dir /home/linuxbrew --shell /bin/bash --groups '' ct-brew-build
 chown -R ct-brew-build:ct-brew-build /home/linuxbrew
 
 # Homebrew uses its normal prefix for bottle relocation, but runs without root.

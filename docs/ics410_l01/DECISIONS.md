@@ -126,8 +126,9 @@ remain unchanged.
 
 ## Serial device group membership — 2026-10-27
 
-Accepted by user direction: include `dialout` in ControlThings group setup for
-the same users receiving `wireshark` and `usbmon`. Apply this through the existing
+Original mechanism (superseded below on 2026-11-11): include `dialout` in
+ControlThings group setup for the same users receiving `wireshark` and `usbmon`.
+Apply this through the existing
 boot service and manual helper; increment the setup version from 1 to 2 so
 existing administrator accounts receive serial access after deployment too.
 Preserve existing memberships and vendor GIDs, with the existing retry/marker
@@ -135,7 +136,8 @@ contract unchanged.
 
 This supersedes the [shared capture-group decision](../DECISIONS.md#controlthings-capture-groups--2026-10-15)
 to leave `dialout` exclusively to Aurora's DX tooling on this branch. Shared
-documentation remains aligned with main; propagation to main is outstanding.
+documentation remained aligned with main; main subsequently received the serial
+and retry changes, then replaced the mechanism on 2026-11-03.
 See [branch operation guidance](DEVELOPMENT.md#capture-and-serial-device-groups).
 
 ### First-boot setup retry correction — 2026-10-28
@@ -151,3 +153,24 @@ The startup race is established in code and covered by the isolated regression;
 guest service logs were not supplied, so the cause of the reported guest failure
 is not independently confirmed. The user confirmed manual setup and membership
 persistence through reboots. Corrected automatic guest setup remains unvalidated.
+
+## Account-creation defaults — 2026-11-11
+
+Accepted by user direction: port main's `7b43999bb626a0daf34255c8d777fce63b4efea0`
+with the course integration changes identified during review. Follow the
+[shared account-creation decision](../DECISIONS.md#controlthings-capture-groups--2026-10-15)
+for `wireshark`, `usbmon`, `dialout` and `plugdev`; keep `wheel` exclusive to
+Plasma Setup's first-administrator setting. This supersedes the course boot-service,
+version-marker, retry and manual-helper mechanisms above. Existing accounts retain
+their memberships and require explicit administrator action if groups are missing.
+
+Preserve both workbook system accounts, cron/at enablement, update presets,
+workbook build secrets and the pinned standard Aurora base. System-account
+exclusion follows `--system`, regardless of shell. Give the disposable Homebrew
+build account an explicit empty supplementary-group list so build processes do
+not inherit normal users' device access. Keep the container sample unchanged.
+
+README synchronization with main is explicitly approved for this port. Bring over
+shared group guidance and decision context, but keep course results and remaining
+validation in [STATUS.md](STATUS.md#new-user-permissions--2026-11-11), without
+copying main's unrelated status or presenting its historical checks as course results.

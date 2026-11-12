@@ -7,24 +7,27 @@ course choices are in [DECISIONS.md](DECISIONS.md).
 
 ## Capture and serial device groups
 
-On this branch, ControlThings group setup adds `dialout` alongside `wireshark`
-and `usbmon`. This supersedes the shared guide's delegation of serial-group
-setup to Aurora's DX tooling. Automatic setup targets current `wheel` members;
-later accounts and non-administrators can use `ujust controlthings-groups` as in
-the [shared setup guidance](../../DEVELOPMENT.md#controlthings-capture-groups).
-Unlike the shared guide's next-boot deferral, an empty `wheel` group exits with
-temporary failure (75), allowing the boot service to retry every 30 seconds
-until first-boot account creation completes. No success marker is written while
-waiting. This closes the race between service startup and administrator creation.
+This branch follows the [shared account-creation defaults](../../DEVELOPMENT.md#controlthings-capture-groups):
+new normal accounts receive `wireshark`, `usbmon`, `dialout` and `plugdev`;
+Plasma Setup also grants `wheel` to the first administrator before login.
+This replaces the versioned boot service, retry loop and
+`ujust controlthings-groups` command. Existing memberships remain unchanged;
+there is no automatic migration of existing accounts. For an existing user,
+follow the shared guide's explicit `usermod --append` instructions and log out
+completely and back in afterward.
 
-Setup version 2 reapplies membership on the next boot after deploying the updated
-image, including systems with a successful version 1 marker. Existing memberships
-and group IDs are preserved. Membership added after a login session starts takes
-effect after logging out completely and back in; this includes manual setup and
-automatic setup that completes after login. Check `id -nG` in the new session
-for all three groups. See the
-[decision](DECISIONS.md#serial-device-group-membership--2026-10-27) and
-[validation status](STATUS.md#serial-device-groups--2026-10-28).
+Both workbook accounts are created with `useradd --system` and remain excluded,
+even though the updater has a Bash shell. The temporary `ct-brew-build` account
+uses an explicit empty supplementary-group list to opt out of normal-user defaults.
+Workbook ownership, credential access and sudo authorization retain their existing
+contracts. The bundled Dojo container has its own account configuration.
+
+The build configurator runs after packages are installed, before workbook accounts
+are created. The pinned Aurora base must provide `/etc/default/useradd`,
+`/etc/xdg/plasmasetuprc` and the KDE config tools; missing config stops the build.
+Run `python3 tests/check_controlthings_groups.py` for isolated account/config checks.
+See the [accepted replacement](DECISIONS.md#account-creation-defaults--2026-11-11)
+and [current validation](STATUS.md#new-user-permissions--2026-11-11).
 
 ## ICS410 L01 workbook
 
